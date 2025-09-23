@@ -1,13 +1,41 @@
-# KrakenD based Agent Gateway
+# KrakenD Agent Gateway
 
-This is a [KrakenD](https://www.krakend.io/docs/ai-gateway/) based Agent Gateway implementation. This is an egress API gateway meant to route incoming requests to the exposed agents.
+A [KrakenD](https://www.krakend.io/docs/ai-gateway/) based Agent Gateway implementation that serves as an egress API gateway for routing incoming requests to exposed agents within the agentic platform.
 
-### Building and Running
+----
+
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Getting Started](#getting-started)
+- [Deployment](#deployment)
+- [Architecture](#architecture)
+
+----
+
+## Prerequisites
+
+The following tools and dependencies are required to run this project:
+
+- **Docker**: For containerization and local development
+- **Kubernetes**: For deployment and orchestration
+- **kubectl**: Kubernetes command-line tool
+- **Agent Runtime Operator**: Required for agent discovery and routing
+
+----
+
+## Getting Started
+
+### 1. Install Dependencies
 
 ```bash
-# install local development dependencies
+# Install system dependencies via Homebrew
 brew bundle --no-lock --verbose
+```
 
+### 2. Build and Run Locally
+
+```bash
 # Build the Docker image
 docker build -t agentic-layer/agent-gateway-krakend .
 
@@ -15,17 +43,29 @@ docker build -t agentic-layer/agent-gateway-krakend .
 docker run -p 8080:8080 agentic-layer/agent-gateway-krakend
 ```
 
+----
+
 ## Deployment
 
-**Note:** Ensure the Agent Runtime Operator is installed and running in your Kubernetes cluster before proceeding.
-For detailed setup instructions, please refer to the [Agent Runtime Operator Getting Started guide](https://github.com/agentic-layer/agent-runtime-operator?tab=readme-ov-file#getting-started).
+### Prerequisites for Deployment
+
+**Important:** Ensure the Agent Runtime Operator is installed and running in your Kubernetes cluster before proceeding. For detailed setup instructions, please refer to the [Agent Runtime Operator Getting Started guide](https://github.com/agentic-layer/agent-runtime-operator?tab=readme-ov-file#getting-started).
+
+### Deploy to Kubernetes
 
 ```bash
-# in order for the demo agent to work we have to manually create a Kubernetes secrets
+# Create required secrets for demo agent
 kubectl create secret generic api-key-secret --from-literal=GOOGLE_API_KEY=$GOOGLE_API_KEY
-kubectl apply -k kustomize/local/
 
-# to test the proxy, issue the following curl command
+# Deploy the agent gateway
+kubectl apply -k deploy/local/
+```
+
+### Testing the Gateway
+
+Test the proxy functionality with the following curl command:
+
+```bash
 curl http://krakend.127.0.0.1.sslip.io/weather_agent/a2a/ \
   -H "Content-Type: application/json" \
   -d '{
@@ -48,6 +88,21 @@ curl http://krakend.127.0.0.1.sslip.io/weather_agent/a2a/ \
      }
    }' | jq
 ```
+
+----
+
+## Architecture
+
+The Agent Gateway is built using KrakenD and integrates with the Agent Runtime Operator to provide:
+
+- **Request Routing**: Routes incoming requests to appropriate exposed agents
+- **Agent Discovery**: Automatically discovers agents through the Agent Runtime Operator
+- **Load Balancing**: Distributes requests across available agent instances
+- **Protocol Support**: Handles Agent-to-Agent (A2A) communication protocols
+
+The deployment structure follows standard Kubernetes patterns with base configurations and environment-specific overlays.
+
+----
 
 ## License
 
