@@ -1,31 +1,17 @@
--include .env
-export
+ifneq (,$(wildcard ./.env))
+    include .env
+    export
+endif
 
-VERSION=main
+.PHONY: all
+all: image
 
-.PHONY: help clean plugins test image up
-
-help:
-	@echo "Supported make targets (you can set the version in the Makefile):"
-	@echo ""
-	@echo "     clean   clean up build artifacts"
-	@echo "   plugins   build and test all plugins"
-	@echo "     image   build docker image and tag as latest and $(VERSION)"
-	@echo "       run   build and start in local docker"
-	@echo ""
-
-.DEFAULT_GOAL := help
-
-clean:
-	rm -rf build
-
+.PHONY: image
 image:
-	@echo VERSION=$(VERSION)
-	docker build \
-		--platform linux/amd64 \
-		--tag agent-gateway-krakend:$(VERSION) \
-		.
-	docker tag agent-gateway-krakend:$(VERSION) agent-gateway-krakend:latest
+	docker build --tag agent-gateway-krakend .
 
+.PHONY: run
 run: image
-	docker run -p 8080:8080 -p 9090:9090 -e OPENAI_API_KEY=$(OPENAI_API_KEY) agent-gateway-krakend:latest
+	docker run -p 8080:8080 -p 9090:9090 \
+		-v $(PWD)/test/krakend.json:/etc/krakend/krakend.json \
+		-e OPENAI_API_KEY=$(OPENAI_API_KEY) agent-gateway-krakend

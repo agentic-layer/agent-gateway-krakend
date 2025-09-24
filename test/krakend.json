@@ -1,0 +1,30 @@
+{
+  "$schema": "https://www.krakend.io/schema/v2.10/krakend.json",
+  "version": 3,
+  "port": 8080,
+  "extra_config": {
+    "router": {
+      "disable_access_log": false,
+      "hide_version_header": true
+    }
+  },
+  "timeout": "60s",
+  "cache_ttl": "5m",
+  "output_encoding": "json",
+  "name": "agent-gateway-krakend",
+  "endpoints": [
+    {
+      "endpoint": "/weather-agent/{anyPath}",
+      "output_encoding": "no-op",
+      "method": "POST",
+      "backend": [
+        {
+          "host": [
+            "http://localhost:8000"
+          ],
+          "url_pattern": "/{anyPath}"
+        }
+      ]
+    }
+  ]
+}

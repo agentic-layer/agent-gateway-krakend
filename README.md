@@ -74,7 +74,7 @@ curl http://krakend.127.0.0.1.sslip.io/weather_agent/a2a/ \
      "method": "message/send",
      "params": {
        "message": {
-         "role": "agent",
+         "role": "user",
          "parts": [
            {
              "kind": "text",
