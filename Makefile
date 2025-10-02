@@ -6,6 +6,12 @@ endif
 .PHONY: all
 all: image
 
+plugins:
+	$(MAKE) -C ./go plugins
+
+test:
+	$(MAKE) -C ./go test
+
 .PHONY: image
 image:
 	docker build --tag agent-gateway-krakend .

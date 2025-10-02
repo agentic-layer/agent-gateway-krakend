@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-gateway-krakend
+  namespace: default
+  labels:
+    app: agent-gateway-krakend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-gateway-krakend
+  template:
+    metadata:
+      labels:
+        app: agent-gateway-krakend
+    spec:
+      containers:
+        - name: agent-gateway-krakend
+          image: ghcr.io/agentic-layer/agent-gateway-krakend:main
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "100m"
+            limits:
+              memory: "64Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: krakend-config-volume
+              mountPath: /etc/krakend
+      volumes:
+        - name: krakend-config-volume
+          configMap:
+            name: krakend-config

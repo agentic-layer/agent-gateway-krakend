@@ -1,28 +1,37 @@
 {
   "$schema": "https://www.krakend.io/schema/v2.10/krakend.json",
   "version": 3,
+  "plugin": {
+    "pattern": ".so",
+    "folder": "/unleash/tentacles/"
+  },
   "port": 8080,
   "extra_config": {
+    "plugin/http-server": {
+      "@comment_name": "Name order defines handler order. Last entry is outermost/first handler.",
+      "name": [
+        "openai-a2a"
+      ]
+    },
     "router": {
       "disable_access_log": false,
       "hide_version_header": true
     }
   },
-  "timeout": "60s",
-  "cache_ttl": "5m",
+  "timeout": "360s",
   "output_encoding": "json",
   "name": "agent-gateway-krakend",
   "endpoints": [
     {
-      "endpoint": "/weather-agent/{anyPath}",
+      "endpoint": "/weather-agent",
       "output_encoding": "no-op",
       "method": "POST",
       "backend": [
         {
           "host": [
-            "http://localhost:8000"
+            "http://weather-agent.default.svc.cluster.local:8000"
           ],
-          "url_pattern": "/{anyPath}"
+          "url_pattern": ""
         }
       ]
     }
