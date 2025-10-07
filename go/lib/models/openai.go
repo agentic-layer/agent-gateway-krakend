@@ -1,5 +1,14 @@
 package models
 
+// NOTE: These types are manually defined because the OpenAI OpenAPI spec cannot be generated
+// due to OpenAPI 3.1.x compatibility issues with oapi-codegen.
+// See: https://github.com/oapi-codegen/oapi-codegen/issues/373
+// The OpenAI spec is available at: https://app.stainless.com/api/spec/documented/openai/openapi.documented.yml
+//
+// These types are simplified and only include the fields needed for basic chat completions.
+// The full OpenAI API supports many additional fields (tools, functions, multi-modal content,
+// streaming, advanced parameters, etc.) which are not included here.
+
 // OpenAI Chat Completion Request structures
 type OpenAIMessage struct {
 	Role    string `json:"role"`
