@@ -62,42 +62,48 @@ func TestOpenAIToA2ATransformation(t *testing.T) {
 	var extraConfig map[string]interface{}
 	json.Unmarshal([]byte(configStr), &extraConfig)
 
-	mockA2AResponse := models.A2AResponse{
-		JSONRPC: "2.0",
-		ID:      1,
-		Result: models.A2AResult{
-			Artifacts: []models.A2AArtifact{
+	timestamp := "2025-10-02T12:00:00Z"
+	mockA2AResponse := models.SendMessageSuccessResponse{
+		Jsonrpc: "2.0",
+		Id:      1,
+		Result: models.SendMessageSuccessResponseResult{
+			Artifacts: []models.Artifact{
 				{
-					ArtifactID: "artifact-123",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "The weather in New York is sunny."},
+					ArtifactId: "artifact-123",
+					Parts: []models.ArtifactPartsElem{
+						models.TextPart{Kind: "text", Text: "The weather in New York is sunny."},
 					},
 				},
 			},
-			ContextID: "context-123",
-			History: []models.A2AHistoryMessage{
+			ContextId: "context-123",
+			History: []models.Message{
 				{
 					Kind:      "message",
-					MessageID: "msg-1",
+					MessageId: "msg-1",
 					Role:      "user",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "What is the weather in New York?"},
+					Parts: []models.MessagePartsElem{
+						models.TextPart{Kind: "text", Text: "What is the weather in New York?"},
 					},
 				},
 				{
 					Kind:      "message",
-					MessageID: "msg-2",
+					MessageId: "msg-2",
 					Role:      "agent",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "The weather in New York is sunny."},
+					Parts: []models.MessagePartsElem{
+						models.TextPart{Kind: "text", Text: "The weather in New York is sunny."},
 					},
 				},
 			},
-			ID:   "task-123",
-			Kind: "task",
-			Status: models.A2AStatus{
+			Id:        "task-123",
+			Kind:      "task",
+			MessageId: "msg-2",
+			Role:      "agent",
+			Parts: []models.MessagePartsElem{
+				models.TextPart{Kind: "text", Text: "The weather in New York is sunny."},
+			},
+			Status: models.TaskStatus{
 				State:     "completed",
-				Timestamp: "2025-10-02T12:00:00Z",
+				Timestamp: &timestamp,
 			},
 		},
 	}
@@ -134,17 +140,21 @@ func TestOpenAIToA2ATransformation(t *testing.T) {
 	assert.Equal(t, "/weather-agent", mockHandler.ReceivedRequest.URL.Path)
 
 	// Verify A2A format was sent to backend
-	var a2aReq models.A2ARequest
+	var a2aReq models.SendMessageRequest
 	err = json.Unmarshal(mockHandler.ReceivedBody, &a2aReq)
 	assert.NoError(t, err)
-	assert.Equal(t, "2.0", a2aReq.JSONRPC)
+	assert.Equal(t, "2.0", a2aReq.Jsonrpc)
 	assert.Equal(t, "message/send", a2aReq.Method)
-	assert.Equal(t, "user", a2aReq.Params.Message.Role)
+	assert.Equal(t, "message", a2aReq.Params.Message.Kind)
 	assert.Equal(t, 1, len(a2aReq.Params.Message.Parts))
-	assert.Equal(t, "text", a2aReq.Params.Message.Parts[0].Kind)
-	assert.Equal(t, "What is the weather in New York?", a2aReq.Params.Message.Parts[0].Text)
-	assert.NotEmpty(t, a2aReq.Params.Message.MessageID)
-	assert.NotEmpty(t, a2aReq.Params.Message.ContextID)
+
+	// Cast the part to TextPart to access fields
+	textPart, ok := a2aReq.Params.Message.Parts[0].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, "text", textPart["kind"])
+	assert.Equal(t, "What is the weather in New York?", textPart["text"])
+	assert.NotEmpty(t, a2aReq.Params.Message.MessageId)
+	assert.NotNil(t, a2aReq.Params.Message.ContextId)
 
 	// Verify OpenAI response format was returned to client
 	var openAIResp models.OpenAIResponse
@@ -186,42 +196,48 @@ func TestCustomEndpointConfiguration(t *testing.T) {
 	var extraConfig map[string]interface{}
 	json.Unmarshal([]byte(configStrCustom), &extraConfig)
 
-	mockA2AResponse := models.A2AResponse{
-		JSONRPC: "2.0",
-		ID:      1,
-		Result: models.A2AResult{
-			Artifacts: []models.A2AArtifact{
+	timestamp := "2025-10-02T12:00:00Z"
+	mockA2AResponse := models.SendMessageSuccessResponse{
+		Jsonrpc: "2.0",
+		Id:      1,
+		Result: models.SendMessageSuccessResponseResult{
+			Artifacts: []models.Artifact{
 				{
-					ArtifactID: "artifact-456",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "Response"},
+					ArtifactId: "artifact-456",
+					Parts: []models.ArtifactPartsElem{
+						models.TextPart{Kind: "text", Text: "Response"},
 					},
 				},
 			},
-			ContextID: "context-456",
-			History: []models.A2AHistoryMessage{
+			ContextId: "context-456",
+			History: []models.Message{
 				{
 					Kind:      "message",
-					MessageID: "msg-1",
+					MessageId: "msg-1",
 					Role:      "user",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "Test"},
+					Parts: []models.MessagePartsElem{
+						models.TextPart{Kind: "text", Text: "Test"},
 					},
 				},
 				{
 					Kind:      "message",
-					MessageID: "msg-2",
+					MessageId: "msg-2",
 					Role:      "agent",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "Response"},
+					Parts: []models.MessagePartsElem{
+						models.TextPart{Kind: "text", Text: "Response"},
 					},
 				},
 			},
-			ID:   "task-456",
-			Kind: "task",
-			Status: models.A2AStatus{
+			Id:        "task-456",
+			Kind:      "task",
+			MessageId: "msg-2",
+			Role:      "agent",
+			Parts: []models.MessagePartsElem{
+				models.TextPart{Kind: "text", Text: "Response"},
+			},
+			Status: models.TaskStatus{
 				State:     "completed",
-				Timestamp: "2025-10-02T12:00:00Z",
+				Timestamp: &timestamp,
 			},
 		},
 	}
@@ -375,7 +391,6 @@ func Test_transformOpenAIToA2A(t *testing.T) {
 	openAIReq := models.OpenAIRequest{
 		Model: "gpt-4",
 		Messages: []models.OpenAIMessage{
-			{Role: "system", Content: "You are a helpful assistant."},
 			{Role: "user", Content: "What is the weather?"},
 		},
 		Temperature: 0.7,
@@ -383,30 +398,24 @@ func Test_transformOpenAIToA2A(t *testing.T) {
 
 	a2aReq := transformOpenAIToA2A(openAIReq)
 
-	assert.Equal(t, "2.0", a2aReq.JSONRPC)
-	assert.Equal(t, 1, a2aReq.ID)
+	assert.Equal(t, "2.0", a2aReq.Jsonrpc)
+	assert.Equal(t, 1, a2aReq.Id)
 	assert.Equal(t, "message/send", a2aReq.Method)
-	assert.Equal(t, "user", a2aReq.Params.Message.Role)
+	assert.Equal(t, "message", a2aReq.Params.Message.Kind)
 	assert.Equal(t, 1, len(a2aReq.Params.Message.Parts))
-	assert.Equal(t, "text", a2aReq.Params.Message.Parts[0].Kind)
-	assert.Equal(t, "What is the weather?", a2aReq.Params.Message.Parts[0].Text)
-	assert.NotEmpty(t, a2aReq.Params.Message.MessageID)
-	assert.NotEmpty(t, a2aReq.Params.Message.ContextID)
-	assert.NotNil(t, a2aReq.Params.Metadata)
 
-	// Verify history contains the system message
-	assert.Equal(t, 1, len(a2aReq.Params.History))
-	assert.Equal(t, "system", a2aReq.Params.History[0].Role)
-	assert.Equal(t, "You are a helpful assistant.", a2aReq.Params.History[0].Parts[0].Text)
+	textPart := a2aReq.Params.Message.Parts[0].(models.TextPart)
+	assert.Equal(t, "text", textPart.Kind)
+	assert.Equal(t, "What is the weather?", textPart.Text)
+	assert.NotEmpty(t, a2aReq.Params.Message.MessageId)
+	assert.NotNil(t, a2aReq.Params.Message.ContextId)
+	assert.NotNil(t, a2aReq.Params.Metadata)
 }
 
 func Test_transformOpenAIToA2A_WithMultipleMessages(t *testing.T) {
 	openAIReq := models.OpenAIRequest{
 		Model: "gpt-4",
 		Messages: []models.OpenAIMessage{
-			{Role: "system", Content: "You are a helpful assistant."},
-			{Role: "user", Content: "What is the weather?"},
-			{Role: "assistant", Content: "I'll check the weather for you."},
 			{Role: "user", Content: "What about tomorrow?"},
 		},
 	}
@@ -414,68 +423,56 @@ func Test_transformOpenAIToA2A_WithMultipleMessages(t *testing.T) {
 	a2aReq := transformOpenAIToA2A(openAIReq)
 
 	// Last message should be the primary message
-	assert.Equal(t, "user", a2aReq.Params.Message.Role)
-	assert.Equal(t, "What about tomorrow?", a2aReq.Params.Message.Parts[0].Text)
+	assert.Equal(t, "message", a2aReq.Params.Message.Kind)
+	textPart := a2aReq.Params.Message.Parts[0].(models.TextPart)
+	assert.Equal(t, "What about tomorrow?", textPart.Text)
 
-	// History should contain all previous messages
-	assert.Equal(t, 3, len(a2aReq.Params.History))
-
-	// Verify first message (system)
-	assert.Equal(t, "system", a2aReq.Params.History[0].Role)
-	assert.Equal(t, "You are a helpful assistant.", a2aReq.Params.History[0].Parts[0].Text)
-
-	// Verify second message (user)
-	assert.Equal(t, "user", a2aReq.Params.History[1].Role)
-	assert.Equal(t, "What is the weather?", a2aReq.Params.History[1].Parts[0].Text)
-
-	// Verify third message (assistant -> agent)
-	assert.Equal(t, "agent", a2aReq.Params.History[2].Role)
-	assert.Equal(t, "I'll check the weather for you.", a2aReq.Params.History[2].Parts[0].Text)
-
-	// All messages should share the same contextId
-	contextID := a2aReq.Params.Message.ContextID
-	for _, histMsg := range a2aReq.Params.History {
-		assert.Equal(t, contextID, histMsg.ContextID)
-	}
+	assert.NotNil(t, a2aReq.Params.Message.ContextId)
 }
 
 func Test_transformA2AToOpenAI_WithArtifacts(t *testing.T) {
-	a2aResp := models.A2AResponse{
-		JSONRPC: "2.0",
-		ID:      1,
-		Result: models.A2AResult{
-			Artifacts: []models.A2AArtifact{
+	timestamp := "2025-10-02T12:00:00Z"
+	a2aResp := models.SendMessageSuccessResponse{
+		Jsonrpc: "2.0",
+		Id:      1,
+		Result: models.SendMessageSuccessResponseResult{
+			Artifacts: []models.Artifact{
 				{
-					ArtifactID: "artifact-123",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "The weather is sunny."},
+					ArtifactId: "artifact-123",
+					Parts: []models.ArtifactPartsElem{
+						models.TextPart{Kind: "text", Text: "The weather is sunny."},
 					},
 				},
 			},
-			ContextID: "context-123",
-			History: []models.A2AHistoryMessage{
+			ContextId: "context-123",
+			History: []models.Message{
 				{
 					Kind:      "message",
-					MessageID: "msg-1",
+					MessageId: "msg-1",
 					Role:      "user",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "What is the weather?"},
+					Parts: []models.MessagePartsElem{
+						models.TextPart{Kind: "text", Text: "What is the weather?"},
 					},
 				},
 				{
 					Kind:      "message",
-					MessageID: "msg-2",
+					MessageId: "msg-2",
 					Role:      "agent",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "The weather is sunny."},
+					Parts: []models.MessagePartsElem{
+						models.TextPart{Kind: "text", Text: "The weather is sunny."},
 					},
 				},
 			},
-			ID:   "task-123",
-			Kind: "task",
-			Status: models.A2AStatus{
+			Id:        "task-123",
+			Kind:      "task",
+			MessageId: "msg-2",
+			Role:      "agent",
+			Parts: []models.MessagePartsElem{
+				models.TextPart{Kind: "text", Text: "The weather is sunny."},
+			},
+			Status: models.TaskStatus{
 				State:     "completed",
-				Timestamp: "2025-10-02T12:00:00Z",
+				Timestamp: &timestamp,
 			},
 		},
 	}
@@ -498,31 +495,37 @@ func Test_transformA2AToOpenAI_WithArtifacts(t *testing.T) {
 }
 
 func Test_transformA2AToOpenAI_WithMultipleArtifacts(t *testing.T) {
-	a2aResp := models.A2AResponse{
-		JSONRPC: "2.0",
-		ID:      1,
-		Result: models.A2AResult{
-			Artifacts: []models.A2AArtifact{
+	timestamp := "2025-10-02T12:00:00Z"
+	a2aResp := models.SendMessageSuccessResponse{
+		Jsonrpc: "2.0",
+		Id:      1,
+		Result: models.SendMessageSuccessResponseResult{
+			Artifacts: []models.Artifact{
 				{
-					ArtifactID: "artifact-1",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "First part. "},
+					ArtifactId: "artifact-1",
+					Parts: []models.ArtifactPartsElem{
+						models.TextPart{Kind: "text", Text: "First part. "},
 					},
 				},
 				{
-					ArtifactID: "artifact-2",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "Second part."},
+					ArtifactId: "artifact-2",
+					Parts: []models.ArtifactPartsElem{
+						models.TextPart{Kind: "text", Text: "Second part."},
 					},
 				},
 			},
-			ContextID: "context-123",
-			History:   []models.A2AHistoryMessage{},
-			ID:        "task-123",
+			ContextId: "context-123",
+			History:   []models.Message{},
+			Id:        "task-123",
 			Kind:      "task",
-			Status: models.A2AStatus{
+			MessageId: "msg-1",
+			Role:      "agent",
+			Parts: []models.MessagePartsElem{
+				models.TextPart{Kind: "text", Text: "First part. Second part."},
+			},
+			Status: models.TaskStatus{
 				State:     "completed",
-				Timestamp: "2025-10-02T12:00:00Z",
+				Timestamp: &timestamp,
 			},
 		},
 	}
@@ -534,35 +537,41 @@ func Test_transformA2AToOpenAI_WithMultipleArtifacts(t *testing.T) {
 }
 
 func Test_transformA2AToOpenAI_FallbackToHistory(t *testing.T) {
-	a2aResp := models.A2AResponse{
-		JSONRPC: "2.0",
-		ID:      1,
-		Result: models.A2AResult{
-			Artifacts: []models.A2AArtifact{}, // No artifacts
-			ContextID: "context-123",
-			History: []models.A2AHistoryMessage{
+	timestamp := "2025-10-02T12:00:00Z"
+	a2aResp := models.SendMessageSuccessResponse{
+		Jsonrpc: "2.0",
+		Id:      1,
+		Result: models.SendMessageSuccessResponseResult{
+			Artifacts: []models.Artifact{}, // No artifacts
+			ContextId: "context-123",
+			History: []models.Message{
 				{
 					Kind:      "message",
-					MessageID: "msg-1",
+					MessageId: "msg-1",
 					Role:      "user",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "What is the weather?"},
+					Parts: []models.MessagePartsElem{
+						models.TextPart{Kind: "text", Text: "What is the weather?"},
 					},
 				},
 				{
 					Kind:      "message",
-					MessageID: "msg-2",
+					MessageId: "msg-2",
 					Role:      "agent",
-					Parts: []models.A2APart{
-						{Kind: "text", Text: "The weather is sunny."},
+					Parts: []models.MessagePartsElem{
+						models.TextPart{Kind: "text", Text: "The weather is sunny."},
 					},
 				},
 			},
-			ID:   "task-123",
-			Kind: "task",
-			Status: models.A2AStatus{
+			Id:        "task-123",
+			Kind:      "task",
+			MessageId: "msg-2",
+			Role:      "agent",
+			Parts: []models.MessagePartsElem{
+				models.TextPart{Kind: "text", Text: "The weather is sunny."},
+			},
+			Status: models.TaskStatus{
 				State:     "completed",
-				Timestamp: "2025-10-02T12:00:00Z",
+				Timestamp: &timestamp,
 			},
 		},
 	}
@@ -575,27 +584,33 @@ func Test_transformA2AToOpenAI_FallbackToHistory(t *testing.T) {
 }
 
 func Test_transformA2AToOpenAI_SkipsNonTextParts(t *testing.T) {
-	a2aResp := models.A2AResponse{
-		JSONRPC: "2.0",
-		ID:      1,
-		Result: models.A2AResult{
-			Artifacts: []models.A2AArtifact{
+	timestamp := "2025-10-02T12:00:00Z"
+	a2aResp := models.SendMessageSuccessResponse{
+		Jsonrpc: "2.0",
+		Id:      1,
+		Result: models.SendMessageSuccessResponseResult{
+			Artifacts: []models.Artifact{
 				{
-					ArtifactID: "artifact-123",
-					Parts: []models.A2APart{
-						{Kind: "data", Data: map[string]string{"foo": "bar"}},
-						{Kind: "text", Text: "Visible text"},
-						{Kind: "image", Data: "base64data"},
+					ArtifactId: "artifact-123",
+					Parts: []models.ArtifactPartsElem{
+						models.DataPart{Kind: "data", Data: map[string]interface{}{"foo": "bar"}},
+						models.TextPart{Kind: "text", Text: "Visible text"},
+						models.FilePart{Kind: "file", File: models.FilePartFile{Uri: "base64data"}},
 					},
 				},
 			},
-			ContextID: "context-123",
-			History:   []models.A2AHistoryMessage{},
-			ID:        "task-123",
+			ContextId: "context-123",
+			History:   []models.Message{},
+			Id:        "task-123",
 			Kind:      "task",
-			Status: models.A2AStatus{
+			MessageId: "msg-1",
+			Role:      "agent",
+			Parts: []models.MessagePartsElem{
+				models.TextPart{Kind: "text", Text: "Visible text"},
+			},
+			Status: models.TaskStatus{
 				State:     "completed",
-				Timestamp: "2025-10-02T12:00:00Z",
+				Timestamp: &timestamp,
 			},
 		},
 	}

@@ -6,6 +6,9 @@ endif
 .PHONY: all
 all: image
 
+generate:
+	$(MAKE) -C ./go generate
+
 plugins:
 	$(MAKE) -C ./go plugins
 

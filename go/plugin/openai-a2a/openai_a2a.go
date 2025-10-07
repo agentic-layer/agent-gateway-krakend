@@ -144,7 +144,7 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 			}
 
 			// Parse A2A response
-			var a2aResp models.A2AResponse
+			var a2aResp models.SendMessageSuccessResponse
 			if err := json.Unmarshal(rw.body.Bytes(), &a2aResp); err != nil {
 				reqLogger.Error("failed to parse A2A response: %s", err)
 				return
@@ -205,7 +205,7 @@ func extractPathPrefix(path string, endpoint string) string {
 }
 
 // transformA2AToOpenAI converts A2A response to OpenAI chat completion format
-func transformA2AToOpenAI(a2aResp models.A2AResponse, originalReq models.OpenAIRequest) models.OpenAIResponse {
+func transformA2AToOpenAI(a2aResp models.SendMessageSuccessResponse, originalReq models.OpenAIRequest) models.OpenAIResponse {
 	// Extract text from artifacts (preferred) or last agent message in history
 	var content strings.Builder
 
@@ -213,8 +213,15 @@ func transformA2AToOpenAI(a2aResp models.A2AResponse, originalReq models.OpenAIR
 	if len(a2aResp.Result.Artifacts) > 0 {
 		for _, artifact := range a2aResp.Result.Artifacts {
 			for _, part := range artifact.Parts {
-				if part.Kind == "text" {
-					content.WriteString(part.Text)
+				// Handle both concrete TextPart and map from JSON unmarshaling
+				if textPart, ok := part.(models.TextPart); ok {
+					content.WriteString(textPart.Text)
+				} else if partMap, ok := part.(map[string]interface{}); ok {
+					if kind, ok := partMap["kind"].(string); ok && kind == "text" {
+						if text, ok := partMap["text"].(string); ok {
+							content.WriteString(text)
+						}
+					}
 				}
 			}
 		}
@@ -226,8 +233,15 @@ func transformA2AToOpenAI(a2aResp models.A2AResponse, originalReq models.OpenAIR
 			msg := a2aResp.Result.History[i]
 			if msg.Role == "agent" {
 				for _, part := range msg.Parts {
-					if part.Kind == "text" {
-						content.WriteString(part.Text)
+					// Handle both concrete TextPart and map from JSON unmarshaling
+					if textPart, ok := part.(models.TextPart); ok {
+						content.WriteString(textPart.Text)
+					} else if partMap, ok := part.(map[string]interface{}); ok {
+						if kind, ok := partMap["kind"].(string); ok && kind == "text" {
+							if text, ok := partMap["text"].(string); ok {
+								content.WriteString(text)
+							}
+						}
 					}
 				}
 				if content.Len() > 0 {
@@ -259,49 +273,33 @@ func transformA2AToOpenAI(a2aResp models.A2AResponse, originalReq models.OpenAIR
 }
 
 // transformOpenAIToA2A converts OpenAI chat completion request to A2A format
-func transformOpenAIToA2A(openAIReq models.OpenAIRequest) models.A2ARequest {
+func transformOpenAIToA2A(openAIReq models.OpenAIRequest) models.SendMessageRequest {
 	contextID := uuid.New().String()
+	messageID := uuid.New().String()
 
-	// Convert all messages to A2A format
-	var history []models.A2AMessage
-	var lastMessage models.A2AMessage
+	// Get the last message (the current user message)
+	lastMsg := openAIReq.Messages[len(openAIReq.Messages)-1]
 
-	for i, msg := range openAIReq.Messages {
-		messageID := uuid.New().String()
-
-		// Map OpenAI roles to A2A roles
-		a2aRole := msg.Role
-		if msg.Role == "assistant" {
-			a2aRole = "agent"
-		}
-
-		a2aMsg := models.A2AMessage{
-			Role: a2aRole,
-			Parts: []models.A2AMessagePart{
-				{
-					Kind: "text",
-					Text: msg.Content,
-				},
+	// Create the main message
+	message := models.Message{
+		Kind:      "message",
+		MessageId: messageID,
+		ContextId: &contextID,
+		Role:      models.MessageRoleUser,
+		Parts: []models.MessagePartsElem{
+			models.TextPart{
+				Kind: "text",
+				Text: lastMsg.Content,
 			},
-			MessageID: messageID,
-			ContextID: contextID,
-		}
-
-		// Last message becomes the primary message, others go to history
-		if i < len(openAIReq.Messages)-1 {
-			history = append(history, a2aMsg)
-		} else {
-			lastMessage = a2aMsg
-		}
+		},
 	}
 
-	a2aReq := models.A2ARequest{
-		JSONRPC: "2.0",
-		ID:      1,
+	a2aReq := models.SendMessageRequest{
+		Jsonrpc: "2.0",
+		Id:      1,
 		Method:  "message/send",
-		Params: models.A2AParams{
-			Message: lastMessage,
-			History: history,
+		Params: models.MessageSendParams{
+			Message: message,
 			Metadata: map[string]interface{}{
 				"conversationId": contextID,
 			},
