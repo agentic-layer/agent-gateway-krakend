@@ -1,6 +1,6 @@
 package models
 
-// A2A Protocol Request structures
+// A2AMessagePart A2A Protocol Request structures
 type A2AMessagePart struct {
 	Kind string `json:"kind"`
 	Text string `json:"text"`
@@ -26,7 +26,7 @@ type A2ARequest struct {
 	Params  A2AParams `json:"params"`
 }
 
-// A2A Response structures
+// A2APart A2A Response structures
 type A2APart struct {
 	Kind string `json:"kind"`
 	Text string `json:"text,omitempty"`
