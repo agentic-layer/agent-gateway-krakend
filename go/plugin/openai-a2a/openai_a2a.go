@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentic-layer/model-router-krakend/lib/header"
-	"github.com/agentic-layer/model-router-krakend/lib/logging"
-	"github.com/agentic-layer/model-router-krakend/lib/models"
+	"github.com/agentic-layer/agent-gateway-krakend/lib/header"
+	"github.com/agentic-layer/agent-gateway-krakend/lib/logging"
+	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
 	"github.com/google/uuid"
 )
 

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentic-layer/model-router-krakend/lib/header"
+	"github.com/agentic-layer/agent-gateway-krakend/lib/header"
 	"github.com/google/uuid"
 )
 

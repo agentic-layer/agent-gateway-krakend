@@ -1,4 +1,4 @@
-module github.com/agentic-layer/model-router-krakend
+module github.com/agentic-layer/agent-gateway-krakend
 
 go 1.25.1
 

@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/agentic-layer/model-router-krakend/lib/models"
+	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
 	"github.com/stretchr/testify/assert"
 )
 
