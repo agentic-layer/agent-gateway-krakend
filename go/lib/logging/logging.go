@@ -3,13 +3,11 @@ package logging
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/agentic-layer/agent-gateway-krakend/lib/header"
 	"github.com/google/uuid"
 )
 
@@ -39,21 +37,10 @@ func New(pluginName string) *PluginLogger {
 	}
 }
 
-// NewWithRandomId creates a new logger with a random sessionId
-func NewWithRandomId(pluginName string) *PluginLogger {
+// NewWithPluginName creates a new logger using the plugin name
+func NewWithPluginName(pluginName string) *PluginLogger {
 	return &PluginLogger{
-		logger:    newLogger(pluginName),
-		sessionId: newRandomId(),
-	}
-}
-
-// NewFromHttpRequest creates a new logger using the sessionId from the request
-func NewFromHttpRequest(pluginName string, req *http.Request) *PluginLogger {
-	sessionId := req.Header.Get(header.SessionId)
-
-	return &PluginLogger{
-		logger:    newLogger(pluginName),
-		sessionId: sessionId,
+		logger: newLogger(pluginName),
 	}
 }
 

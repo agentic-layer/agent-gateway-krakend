@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentic-layer/agent-gateway-krakend/lib/header"
 	"github.com/agentic-layer/agent-gateway-krakend/lib/logging"
 	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
+	"github.com/go-http-utils/headers"
 	"github.com/google/uuid"
 )
 
@@ -83,7 +83,7 @@ func (r registerer) registerHandlers(_ context.Context, extra map[string]interfa
 
 func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {
-		reqLogger := logging.NewFromHttpRequest(pluginName, req)
+		reqLogger := logging.NewWithPluginName(pluginName)
 
 		// Check if this is a POST request to a chat completions endpoint
 		if req.Method == http.MethodPost && isChatCompletionsEndpoint(req.URL.Path, cfg.Endpoint) {
@@ -129,7 +129,7 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 			req.Body = io.NopCloser(bytes.NewReader(a2aBody))
 			req.ContentLength = int64(len(a2aBody))
 			req.URL.Path = "/" + pathPrefix
-			req.Header.Set(header.ContentType, "application/json")
+			req.Header.Set(headers.ContentType, "application/json")
 
 			// Wrap response writer to capture A2A response
 			rw := newResponseWriter(w)
@@ -164,7 +164,7 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 			reqLogger.Info("transformed A2A response back to OpenAI format")
 
 			// Write the transformed response
-			w.Header().Set(header.ContentType, "application/json")
+			w.Header().Set(headers.ContentType, "application/json")
 			w.WriteHeader(http.StatusOK)
 			if _, err := w.Write(openAIRespBody); err != nil {
 				reqLogger.Error("failed to write response: %s", err)
