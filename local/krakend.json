@@ -29,7 +29,7 @@
       "backend": [
         {
           "host": [
-            "http://weather-agent.default.svc.cluster.local:8000"
+            "http://host.docker.internal:8000"
           ],
           "url_pattern": ""
         }
