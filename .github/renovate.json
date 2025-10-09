@@ -1,5 +1,12 @@
 {
   "extends": [
     "github>agentic-layer/renovate-config"
+  ],
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["devopsfaith/krakend", "golang"],
+      "automerge": false
+    }
   ]
 }

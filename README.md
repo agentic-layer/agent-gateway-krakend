@@ -1,72 +1,67 @@
-# KrakenD Agent Gateway
+# Agent Gateway KrakenD
 
 A [KrakenD](https://www.krakend.io/docs/ai-gateway/) based Agent Gateway implementation that serves as an egress API gateway for routing incoming requests to exposed agents within the agentic platform.
 
-----
+## Development
 
-## Table of Contents
+### Prerequisites
 
-- [Prerequisites](#prerequisites)
-- [Getting Started](#getting-started)
-- [Deployment](#deployment)
-- [Architecture](#architecture)
-
-----
-
-## Prerequisites
-
-The following tools and dependencies are required to run this project:
+The following tools are required for development:
 
 - **Docker**: For containerization and local development
-- **Kubernetes**: For deployment and orchestration
-- **kubectl**: Kubernetes command-line tool
-- **Agent Runtime Operator**: Required for agent discovery and routing
 
-----
+### Build and Deploy
 
-## Getting Started
+#### Building Plugins
 
-### 1. Install Dependencies
+Build the openai-a2a plugin:
 
 ```bash
-# Install system dependencies via Homebrew
-brew bundle --no-lock --verbose
+cd go
+make openai-a2a
 ```
 
-### 2. Build and Run Locally
+This will compile the plugin and output it to `build/openai-a2a.so`.
+
+#### Docker Compose
+
+Start the agent gateway using Docker Compose:
 
 ```bash
-# Build the Docker image
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your configuration
+# Then start the services
+docker-compose up --build
+```
+
+Stop the services:
+
+```bash
+docker-compose down
+```
+
+#### Manual Docker Build
+
+Build the Docker image:
+
+```bash
 docker build -t agentic-layer/agent-gateway-krakend .
-
-# Run the container
-docker run -p 8080:8080 agentic-layer/agent-gateway-krakend
 ```
 
-----
-
-## Deployment
-
-### Prerequisites for Deployment
-
-**Important:** Ensure the Agent Runtime Operator is installed and running in your Kubernetes cluster before proceeding. For detailed setup instructions, please refer to the [Agent Runtime Operator Getting Started guide](https://github.com/agentic-layer/agent-runtime-operator?tab=readme-ov-file#getting-started).
-
-### Deploy to Kubernetes
+Run the container locally:
 
 ```bash
-# Create required secrets for demo agent
-kubectl create secret generic api-key-secret --from-literal=GOOGLE_API_KEY=$GOOGLE_API_KEY
-
-# Deploy the agent gateway
-kubectl apply -k deploy/local/
+docker run -p 8080:8080 -v $(pwd)/local/krakend.json:/etc/krakend/krakend.json:ro agentic-layer/agent-gateway-krakend
 ```
 
 ### Testing the Gateway
 
-Test the proxy functionality with the following curl command:
+Test the proxy functionality:
 
 ```bash
-curl http://krakend.127.0.0.1.sslip.io/weather_agent/a2a/ \
+curl http://localhost:8080/weather-agent \
   -H "Content-Type: application/json" \
   -d '{
      "jsonrpc": "2.0",
@@ -89,21 +84,6 @@ curl http://krakend.127.0.0.1.sslip.io/weather_agent/a2a/ \
    }' | jq
 ```
 
-----
+## Contribution
 
-## Architecture
-
-The Agent Gateway is built using KrakenD and integrates with the Agent Runtime Operator to provide:
-
-- **Request Routing**: Routes incoming requests to appropriate exposed agents
-- **Agent Discovery**: Automatically discovers agents through the Agent Runtime Operator
-- **Load Balancing**: Distributes requests across available agent instances
-- **Protocol Support**: Handles Agent-to-Agent (A2A) communication protocols
-
-The deployment structure follows standard Kubernetes patterns with base configurations and environment-specific overlays.
-
-----
-
-## License
-
-This software is provided under the Apache v2.0 open source license, read the `LICENSE` file for details.
+See [Contribution Guide](https://github.com/agentic-layer/agent-runtime-operator?tab=contributing-ov-file) for details on contribution, and the process for submitting pull requests.
