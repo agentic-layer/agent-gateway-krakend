@@ -165,7 +165,10 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 
 			// Write the transformed response
 			w.Header().Set(headers.ContentType, "application/json")
+			// Remove Content-Length to allow for recalculation
+			w.Header().Del(headers.ContentLength)
 			w.WriteHeader(http.StatusOK)
+
 			if _, err := w.Write(openAIRespBody); err != nil {
 				reqLogger.Error("failed to write response: %s", err)
 			}
