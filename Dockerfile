@@ -17,6 +17,7 @@ WORKDIR /maelstrom
 RUN go get -t ./...
 
 RUN go build -buildmode=plugin -o openai-a2a.so ./plugin/openai-a2a
+RUN go build -buildmode=plugin -o agentcard-rewriter.so ./plugin/agentcard-rewriter
 
 FROM gcr.io/distroless/base-debian12
 ARG KRAKENX_VERSION

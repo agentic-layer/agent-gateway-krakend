@@ -1,6 +1,6 @@
 .PHONY: test generate
 
-PLUGINS=openai-a2a
+PLUGINS=openai-a2a agentcard-rewriter
 
 test:
 	go test -cover ./...
