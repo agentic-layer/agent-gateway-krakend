@@ -18,8 +18,7 @@ const (
 )
 
 type config struct {
-	GatewayDomain string `json:"gateway_domain"` // e.g., "https://gateway.agentic-layer.ai"
-	PathPrefix    string `json:"path_prefix"`    // e.g., "/agents" (optional, defaults to "")
+	GatewayURL string `json:"gateway_url"` // Full gateway URL with scheme and port, e.g., "https://gateway.agentic-layer.ai" or "http://localhost:10000"
 }
 
 type registerer string
@@ -89,7 +88,7 @@ func parseConfig(extra map[string]interface{}, cfg *config) error {
 		return fmt.Errorf("cannot parse extra config: %s", err.Error())
 	}
 
-	logger.Info("configuration loaded: gateway_domain=%s, path_prefix=%s", cfg.GatewayDomain, cfg.PathPrefix)
+	logger.Info("configuration loaded: gateway_url=%s", cfg.GatewayURL)
 	return nil
 }
 
@@ -111,23 +110,23 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 		if req.Method == http.MethodGet && isAgentCardEndpoint(req.URL.Path) {
 			reqLogger.Info("intercepted agent card request: %s", req.URL.Path)
 
-			// Get gateway domain from request headers (with config fallback)
-			gatewayDomain, err := getGatewayDomain(req, cfg)
+			// Get gateway URL from request headers (with config fallback)
+			gatewayURL, err := getGatewayURL(req, cfg)
 			if err != nil {
-				reqLogger.Warn("cannot determine gateway domain: %s - passing through", err)
+				reqLogger.Warn("cannot determine gateway URL: %s - passing through", err)
 				handler.ServeHTTP(w, req)
 				return
 			}
 
-			// Extract agent name from path
-			agentName := extractAgentName(req.URL.Path)
-			if agentName == "" {
-				reqLogger.Warn("cannot extract agent name from path: %s - passing through", req.URL.Path)
+			// Extract full agent path from request (everything before /.well-known)
+			agentPath := extractAgentPath(req.URL.Path)
+			if agentPath == "" {
+				reqLogger.Warn("cannot extract agent path from: %s - passing through", req.URL.Path)
 				handler.ServeHTTP(w, req)
 				return
 			}
 
-			reqLogger.Info("rewriting URLs for agent: %s, gateway: %s", agentName, gatewayDomain)
+			reqLogger.Info("rewriting URLs for agent path: %s, gateway: %s", agentPath, gatewayURL)
 
 			// Wrap response writer to capture backend response
 			rw := newResponseWriter(w)
@@ -164,7 +163,7 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 			}
 
 			// Rewrite agent card URLs
-			agentCard = rewriteAgentCard(agentCard, gatewayDomain, agentName, cfg.PathPrefix)
+			agentCard = rewriteAgentCard(agentCard, gatewayURL, agentPath)
 
 			// Marshal rewritten agent card
 			rewrittenBody, err := json.Marshal(agentCard)
