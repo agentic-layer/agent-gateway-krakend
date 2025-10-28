@@ -114,6 +114,9 @@ func TestAgentCardInterception(t *testing.T) {
 
 	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-ID", "successful-transform-request-id")
+		w.Header().Set("X-Custom-Header", "backend-custom-value")
+		w.Header().Set("Cache-Control", "max-age=3600")
 		w.WriteHeader(http.StatusOK)
 		w.Write(cardJSON)
 	})
@@ -167,6 +170,20 @@ func TestAgentCardInterception(t *testing.T) {
 	if responseCard.Provider.Url != "https://qaware.de" {
 		t.Errorf("Provider.Url = %q, want unchanged", responseCard.Provider.Url)
 	}
+
+	// Verify backend headers are preserved during transformation
+	if rec.Header().Get("Content-Type") != "application/json" {
+		t.Errorf("Content-Type header = %q, want %q", rec.Header().Get("Content-Type"), "application/json")
+	}
+	if rec.Header().Get("X-Request-ID") != "successful-transform-request-id" {
+		t.Errorf("X-Request-ID header = %q, want %q", rec.Header().Get("X-Request-ID"), "successful-transform-request-id")
+	}
+	if rec.Header().Get("X-Custom-Header") != "backend-custom-value" {
+		t.Errorf("X-Custom-Header = %q, want %q", rec.Header().Get("X-Custom-Header"), "backend-custom-value")
+	}
+	if rec.Header().Get("Cache-Control") != "max-age=3600" {
+		t.Errorf("Cache-Control = %q, want %q", rec.Header().Get("Cache-Control"), "max-age=3600")
+	}
 }
 
 // TestNonOKStatusPassThrough verifies non-OK responses pass through unchanged
@@ -197,6 +214,9 @@ func TestNonOKStatusPassThrough(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a mock backend that returns non-OK status
 			backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-Request-ID", "test-request-id-123")
+				w.Header().Set("Cache-Control", "no-cache")
+				w.Header().Set("X-Custom-Header", "custom-value")
 				w.WriteHeader(tt.statusCode)
 				w.Write([]byte(tt.body))
 			})
@@ -223,6 +243,17 @@ func TestNonOKStatusPassThrough(t *testing.T) {
 			if rec.Body.String() != tt.body {
 				t.Errorf("body = %q, want %q", rec.Body.String(), tt.body)
 			}
+
+			// Verify headers are preserved
+			if rec.Header().Get("X-Request-ID") != "test-request-id-123" {
+				t.Errorf("X-Request-ID header = %q, want %q", rec.Header().Get("X-Request-ID"), "test-request-id-123")
+			}
+			if rec.Header().Get("Cache-Control") != "no-cache" {
+				t.Errorf("Cache-Control header = %q, want %q", rec.Header().Get("Cache-Control"), "no-cache")
+			}
+			if rec.Header().Get("X-Custom-Header") != "custom-value" {
+				t.Errorf("X-Custom-Header = %q, want %q", rec.Header().Get("X-Custom-Header"), "custom-value")
+			}
 		})
 	}
 }
@@ -233,6 +264,8 @@ func TestMalformedJSONPassThrough(t *testing.T) {
 
 	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-ID", "malformed-json-request-id")
+		w.Header().Set("X-Custom-Header", "malformed-json-value")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(malformedJSON))
 	})
@@ -259,6 +292,17 @@ func TestMalformedJSONPassThrough(t *testing.T) {
 	if rec.Body.String() != malformedJSON {
 		t.Errorf("body = %q, want %q", rec.Body.String(), malformedJSON)
 	}
+
+	// Verify headers are preserved
+	if rec.Header().Get("Content-Type") != "application/json" {
+		t.Errorf("Content-Type header = %q, want %q", rec.Header().Get("Content-Type"), "application/json")
+	}
+	if rec.Header().Get("X-Request-ID") != "malformed-json-request-id" {
+		t.Errorf("X-Request-ID header = %q, want %q", rec.Header().Get("X-Request-ID"), "malformed-json-request-id")
+	}
+	if rec.Header().Get("X-Custom-Header") != "malformed-json-value" {
+		t.Errorf("X-Custom-Header = %q, want %q", rec.Header().Get("X-Custom-Header"), "malformed-json-value")
+	}
 }
 
 // TestNonJSONContentTypePassThrough verifies non-JSON responses pass through
@@ -267,6 +311,8 @@ func TestNonJSONContentTypePassThrough(t *testing.T) {
 
 	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("X-Request-ID", "html-request-id")
+		w.Header().Set("X-Custom-Header", "html-custom-value")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(htmlResponse))
 	})
@@ -292,6 +338,17 @@ func TestNonJSONContentTypePassThrough(t *testing.T) {
 	}
 	if rec.Body.String() != htmlResponse {
 		t.Errorf("body = %q, want %q", rec.Body.String(), htmlResponse)
+	}
+
+	// Verify headers are preserved
+	if rec.Header().Get("Content-Type") != "text/html" {
+		t.Errorf("Content-Type header = %q, want %q", rec.Header().Get("Content-Type"), "text/html")
+	}
+	if rec.Header().Get("X-Request-ID") != "html-request-id" {
+		t.Errorf("X-Request-ID header = %q, want %q", rec.Header().Get("X-Request-ID"), "html-request-id")
+	}
+	if rec.Header().Get("X-Custom-Header") != "html-custom-value" {
+		t.Errorf("X-Custom-Header = %q, want %q", rec.Header().Get("X-Custom-Header"), "html-custom-value")
 	}
 }
 

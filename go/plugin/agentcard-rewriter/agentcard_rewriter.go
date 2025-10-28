@@ -99,6 +99,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			// Only transform successful responses
 			if rw.statusCode != http.StatusOK {
 				reqLogger.Info("backend returned non-OK status: %d - passing through", rw.statusCode)
+				copyHeaders(w.Header(), rw.Header())
 				w.WriteHeader(rw.statusCode)
 				w.Write(rw.body.Bytes())
 				return
@@ -108,6 +109,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			contentType := rw.Header().Get("Content-Type")
 			if !strings.Contains(contentType, "application/json") {
 				reqLogger.Warn("unexpected content-type: %s - passing through", contentType)
+				copyHeaders(w.Header(), rw.Header())
 				w.WriteHeader(rw.statusCode)
 				w.Write(rw.body.Bytes())
 				return
@@ -117,6 +119,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			var agentCard models.AgentCard
 			if err := json.Unmarshal(rw.body.Bytes(), &agentCard); err != nil {
 				reqLogger.Error("failed to parse agent card: %s - passing through original", err)
+				copyHeaders(w.Header(), rw.Header())
 				w.WriteHeader(rw.statusCode)
 				w.Write(rw.body.Bytes())
 				return
@@ -143,13 +146,30 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 
 			reqLogger.Info("transformed agent card URLs to external gateway format")
 
-			// Write the transformed response
+			// Todo remove before merge
+			// Log the rewritten body for debugging
+			bodyPreview := string(rewrittenBody)
+			if len(bodyPreview) > 200 {
+				bodyPreview = bodyPreview[:200] + "..."
+			}
+			reqLogger.Info("rewritten body size: %d bytes, preview: %s", len(rewrittenBody), bodyPreview)
+
+			// Write the transformed response (following openai-a2a plugin pattern)
+			// First copy backend headers to preserve metadata like X-Request-ID, CORS headers, etc.
+			copyHeaders(w.Header(), rw.Header())
+			// Then set/override headers specific to the transformed response
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Del("Content-Length") // Allow recalculation
+			// Remove Content-Length to allow for recalculation
+			w.Header().Del("Content-Length")
+			reqLogger.Info("about to write header with status 200")
 			w.WriteHeader(http.StatusOK)
 
-			if _, err := w.Write(rewrittenBody); err != nil {
-				reqLogger.Error("failed to write response: %s", err)
+			reqLogger.Info("about to write body (%d bytes)", len(rewrittenBody))
+			bytesWritten, err := w.Write(rewrittenBody)
+			if err != nil {
+				reqLogger.Error("FAILED to write response: %s", err)
+			} else {
+				reqLogger.Info("successfully wrote %d bytes to response", bytesWritten)
 			}
 			return
 		}

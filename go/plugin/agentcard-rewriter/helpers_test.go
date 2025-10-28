@@ -285,3 +285,113 @@ func TestIsInternalURL(t *testing.T) {
 		})
 	}
 }
+
+func TestCopyHeaders(t *testing.T) {
+	tests := []struct {
+		name        string
+		srcHeaders  map[string][]string
+		dstHeaders  map[string][]string
+		expectedDst map[string][]string
+	}{
+		{
+			name: "copy single header",
+			srcHeaders: map[string][]string{
+				"X-Request-ID": {"test-123"},
+			},
+			dstHeaders: map[string][]string{},
+			expectedDst: map[string][]string{
+				"X-Request-ID": {"test-123"},
+			},
+		},
+		{
+			name: "copy multiple headers",
+			srcHeaders: map[string][]string{
+				"X-Request-ID":  {"test-123"},
+				"Cache-Control": {"max-age=3600"},
+				"Content-Type":  {"application/json"},
+			},
+			dstHeaders: map[string][]string{},
+			expectedDst: map[string][]string{
+				"X-Request-ID":  {"test-123"},
+				"Cache-Control": {"max-age=3600"},
+				"Content-Type":  {"application/json"},
+			},
+		},
+		{
+			name: "override existing headers",
+			srcHeaders: map[string][]string{
+				"Content-Type": {"application/json"},
+				"X-Custom":     {"new-value"},
+			},
+			dstHeaders: map[string][]string{
+				"Content-Type": {"text/html"},
+				"X-Existing":   {"existing-value"},
+			},
+			expectedDst: map[string][]string{
+				"Content-Type": {"application/json"},
+				"X-Custom":     {"new-value"},
+				"X-Existing":   {"existing-value"},
+			},
+		},
+		{
+			name: "copy multi-value headers",
+			srcHeaders: map[string][]string{
+				"Set-Cookie": {"session=abc123", "user=john"},
+				"X-Custom":   {"value1", "value2"},
+			},
+			dstHeaders: map[string][]string{},
+			expectedDst: map[string][]string{
+				"Set-Cookie": {"session=abc123", "user=john"},
+				"X-Custom":   {"value1", "value2"},
+			},
+		},
+		{
+			name:       "copy from empty source",
+			srcHeaders: map[string][]string{},
+			dstHeaders: map[string][]string{
+				"X-Existing": {"existing-value"},
+			},
+			expectedDst: map[string][]string{
+				"X-Existing": {"existing-value"},
+			},
+		},
+		{
+			name: "copy to empty destination",
+			srcHeaders: map[string][]string{
+				"X-Source": {"source-value"},
+			},
+			dstHeaders: map[string][]string{},
+			expectedDst: map[string][]string{
+				"X-Source": {"source-value"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := http.Header(tt.srcHeaders)
+			dst := http.Header(tt.dstHeaders)
+
+			copyHeaders(dst, src)
+
+			// Verify all expected headers are present
+			for key, expectedValues := range tt.expectedDst {
+				actualValues := dst[key]
+				if len(actualValues) != len(expectedValues) {
+					t.Errorf("header %q has %d values, want %d", key, len(actualValues), len(expectedValues))
+					continue
+				}
+				for i, expectedValue := range expectedValues {
+					if actualValues[i] != expectedValue {
+						t.Errorf("header %q[%d] = %q, want %q", key, i, actualValues[i], expectedValue)
+					}
+				}
+			}
+
+			// Verify no unexpected headers are present
+			if len(dst) != len(tt.expectedDst) {
+				t.Errorf("destination has %d headers, want %d", len(dst), len(tt.expectedDst))
+			}
+		})
+	}
+}
