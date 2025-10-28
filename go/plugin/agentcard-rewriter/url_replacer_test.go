@@ -11,40 +11,73 @@ func TestConstructExternalURL(t *testing.T) {
 		name          string
 		gatewayDomain string
 		agentName     string
+		pathPrefix    string
 		expected      string
 	}{
 		{
-			name:          "basic construction",
+			name:          "basic construction without prefix",
 			gatewayDomain: "https://gateway.agentic-layer.ai",
 			agentName:     "weather-agent",
+			pathPrefix:    "",
 			expected:      "https://gateway.agentic-layer.ai/weather-agent",
 		},
 		{
 			name:          "gateway domain with trailing slash",
 			gatewayDomain: "https://gateway.agentic-layer.ai/",
 			agentName:     "agent",
+			pathPrefix:    "",
 			expected:      "https://gateway.agentic-layer.ai/agent",
 		},
 		{
-			name:          "localhost",
+			name:          "localhost without prefix",
 			gatewayDomain: "http://localhost:10000",
 			agentName:     "test-agent",
+			pathPrefix:    "",
 			expected:      "http://localhost:10000/test-agent",
 		},
 		{
 			name:          "agent with hyphens",
 			gatewayDomain: "https://gateway.ai",
 			agentName:     "cross-selling-agent",
+			pathPrefix:    "",
 			expected:      "https://gateway.ai/cross-selling-agent",
+		},
+		{
+			name:          "with /agents prefix",
+			gatewayDomain: "https://gateway.agentic-layer.ai",
+			agentName:     "weather-agent",
+			pathPrefix:    "/agents",
+			expected:      "https://gateway.agentic-layer.ai/agents/weather-agent",
+		},
+		{
+			name:          "with /api/v1/agents prefix",
+			gatewayDomain: "https://gateway.ai",
+			agentName:     "test-agent",
+			pathPrefix:    "/api/v1/agents",
+			expected:      "https://gateway.ai/api/v1/agents/test-agent",
+		},
+		{
+			name:          "prefix with trailing slash",
+			gatewayDomain: "https://gateway.ai",
+			agentName:     "test-agent",
+			pathPrefix:    "/agents/",
+			expected:      "https://gateway.ai/agents/test-agent",
+		},
+		{
+			name:          "both trailing slashes",
+			gatewayDomain: "https://gateway.ai/",
+			agentName:     "test-agent",
+			pathPrefix:    "/agents/",
+			expected:      "https://gateway.ai/agents/test-agent",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := constructExternalURL(tt.gatewayDomain, tt.agentName)
+			result := constructExternalURL(tt.gatewayDomain, tt.agentName, tt.pathPrefix)
 			if result != tt.expected {
-				t.Errorf("constructExternalURL(%q, %q) = %q, want %q",
-					tt.gatewayDomain, tt.agentName, result, tt.expected)
+				t.Errorf("constructExternalURL(%q, %q, %q) = %q, want %q",
+					tt.gatewayDomain, tt.agentName, tt.pathPrefix, result, tt.expected)
 			}
 		})
 	}
@@ -172,7 +205,7 @@ func TestRewriteAdditionalInterfaces(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := rewriteAdditionalInterfaces(tt.interfaces, tt.gatewayDomain, tt.agentName)
+			result := rewriteAdditionalInterfaces(tt.interfaces, tt.gatewayDomain, tt.agentName, "")
 
 			if len(result) != len(tt.expected) {
 				t.Errorf("rewriteAdditionalInterfaces() returned %d interfaces, want %d",
@@ -318,7 +351,7 @@ func TestRewriteAgentCard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := rewriteAgentCard(tt.card, tt.gatewayDomain, tt.agentName)
+			result := rewriteAgentCard(tt.card, tt.gatewayDomain, tt.agentName, "")
 			tt.checkFunc(t, result)
 		})
 	}

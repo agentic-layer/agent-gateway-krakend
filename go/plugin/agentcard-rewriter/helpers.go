@@ -35,26 +35,31 @@ func extractAgentName(path string) string {
 	return ""
 }
 
-// getGatewayDomain extracts the gateway domain from request headers
+// getGatewayDomain extracts the gateway domain from request headers with config fallback
 // Returns the full URL scheme + host, or an error if it cannot be determined
-func getGatewayDomain(req *http.Request) (string, error) {
+func getGatewayDomain(req *http.Request, cfg config) (string, error) {
 	host := req.Host
+
+	// Try header detection first
+	if host != "" && !strings.Contains(host, ".svc.cluster.local") {
+		// Default to https, but check X-Forwarded-Proto header
+		scheme := "https"
+		if proto := req.Header.Get("X-Forwarded-Proto"); proto != "" {
+			scheme = proto
+		}
+		return fmt.Sprintf("%s://%s", scheme, host), nil
+	}
+
+	// Fallback to configured gateway domain
+	if cfg.GatewayDomain != "" {
+		return cfg.GatewayDomain, nil
+	}
+
+	// Both methods failed
 	if host == "" {
-		return "", fmt.Errorf("Host header not present")
+		return "", fmt.Errorf("Host header not present and no gateway_domain configured")
 	}
-
-	// Skip rewriting for internal cluster requests
-	if strings.Contains(host, ".svc.cluster.local") {
-		return "", fmt.Errorf("internal cluster request")
-	}
-
-	// Default to https, but check X-Forwarded-Proto header
-	scheme := "https"
-	if proto := req.Header.Get("X-Forwarded-Proto"); proto != "" {
-		scheme = proto
-	}
-
-	return fmt.Sprintf("%s://%s", scheme, host), nil
+	return "", fmt.Errorf("internal cluster request and no gateway_domain configured")
 }
 
 // isInternalURL checks if a URL is an internal Kubernetes cluster URL

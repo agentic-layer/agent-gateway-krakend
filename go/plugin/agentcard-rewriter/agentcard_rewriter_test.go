@@ -10,12 +10,125 @@ import (
 	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
 )
 
-// TestPluginRegistration verifies the plugin can be registered
-func TestPluginRegistration(t *testing.T) {
-	if HandlerRegisterer == "" {
-		t.Error("HandlerRegisterer is empty")
+// Test configuration strings
+const (
+	configStrEmpty   = `{}`
+	configStrMinimal = `{
+		"agentcard_rw_config": {}
+	}`
+	configStrWithDomain = `{
+		"agentcard_rw_config": {
+			"gateway_domain": "https://configured-gateway.example.com"
+		}
+	}`
+	configStrWithPrefix = `{
+		"agentcard_rw_config": {
+			"gateway_domain": "https://configured-gateway.example.com",
+			"path_prefix": "/agents"
+		}
+	}`
+	configStrInvalidConfig = `{
+		"agentcard_rw_config": "not an object"
+	}`
+)
+
+// TestParseConfig verifies configuration parsing works correctly
+func TestParseConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		configJSON  string
+		expectError bool
+		checkFunc   func(t *testing.T, cfg config)
+	}{
+		{
+			name:        "empty config uses defaults",
+			configJSON:  configStrEmpty,
+			expectError: false,
+			checkFunc: func(t *testing.T, cfg config) {
+				if cfg.GatewayDomain != "" {
+					t.Errorf("GatewayDomain = %q, want empty", cfg.GatewayDomain)
+				}
+				if cfg.PathPrefix != "" {
+					t.Errorf("PathPrefix = %q, want empty", cfg.PathPrefix)
+				}
+			},
+		},
+		{
+			name:        "minimal config with empty values",
+			configJSON:  configStrMinimal,
+			expectError: false,
+			checkFunc: func(t *testing.T, cfg config) {
+				if cfg.GatewayDomain != "" {
+					t.Errorf("GatewayDomain = %q, want empty", cfg.GatewayDomain)
+				}
+				if cfg.PathPrefix != "" {
+					t.Errorf("PathPrefix = %q, want empty", cfg.PathPrefix)
+				}
+			},
+		},
+		{
+			name:        "config with gateway_domain",
+			configJSON:  configStrWithDomain,
+			expectError: false,
+			checkFunc: func(t *testing.T, cfg config) {
+				expected := "https://configured-gateway.example.com"
+				if cfg.GatewayDomain != expected {
+					t.Errorf("GatewayDomain = %q, want %q", cfg.GatewayDomain, expected)
+				}
+				if cfg.PathPrefix != "" {
+					t.Errorf("PathPrefix = %q, want empty", cfg.PathPrefix)
+				}
+			},
+		},
+		{
+			name:        "config with gateway_domain and path_prefix",
+			configJSON:  configStrWithPrefix,
+			expectError: false,
+			checkFunc: func(t *testing.T, cfg config) {
+				expectedDomain := "https://configured-gateway.example.com"
+				expectedPrefix := "/agents"
+				if cfg.GatewayDomain != expectedDomain {
+					t.Errorf("GatewayDomain = %q, want %q", cfg.GatewayDomain, expectedDomain)
+				}
+				if cfg.PathPrefix != expectedPrefix {
+					t.Errorf("PathPrefix = %q, want %q", cfg.PathPrefix, expectedPrefix)
+				}
+			},
+		},
+		{
+			name:        "invalid config type should error",
+			configJSON:  configStrInvalidConfig,
+			expectError: true,
+			checkFunc:   func(t *testing.T, cfg config) {},
+		},
 	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var extraConfig map[string]interface{}
+			if err := json.Unmarshal([]byte(tt.configJSON), &extraConfig); err != nil {
+				t.Fatalf("failed to unmarshal test config: %v", err)
+			}
+
+			var cfg config
+			err := parseConfig(extraConfig, &cfg)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("parseConfig() expected error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("parseConfig() unexpected error: %v", err)
+				}
+				tt.checkFunc(t, cfg)
+			}
+		})
+	}
+}
+
+// TestPluginRegistration verifies the plugin can be registered
+func TestPluginRegistration(t *testing.T) {
 	var called bool
 	HandlerRegisterer.RegisterHandlers(func(name string, handler func(context.Context, map[string]interface{}, http.Handler) (http.Handler, error)) {
 		called = true
@@ -63,7 +176,7 @@ func TestRequestPassThrough(t *testing.T) {
 			// Create a mock backend that returns a simple response
 			backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("backend response"))
+				_, _ = w.Write([]byte("backend response"))
 			})
 
 			// Create the plugin handler
@@ -118,7 +231,7 @@ func TestAgentCardInterception(t *testing.T) {
 		w.Header().Set("X-Custom-Header", "backend-custom-value")
 		w.Header().Set("Cache-Control", "max-age=3600")
 		w.WriteHeader(http.StatusOK)
-		w.Write(cardJSON)
+		_, _ = w.Write(cardJSON)
 	})
 
 	// Create the plugin handler
@@ -218,7 +331,7 @@ func TestNonOKStatusPassThrough(t *testing.T) {
 				w.Header().Set("Cache-Control", "no-cache")
 				w.Header().Set("X-Custom-Header", "custom-value")
 				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.body))
+				_, _ = w.Write([]byte(tt.body))
 			})
 
 			// Create the plugin handler
@@ -267,7 +380,7 @@ func TestMalformedJSONPassThrough(t *testing.T) {
 		w.Header().Set("X-Request-ID", "malformed-json-request-id")
 		w.Header().Set("X-Custom-Header", "malformed-json-value")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(malformedJSON))
+		_, _ = w.Write([]byte(malformedJSON))
 	})
 
 	// Create the plugin handler
@@ -314,7 +427,7 @@ func TestNonJSONContentTypePassThrough(t *testing.T) {
 		w.Header().Set("X-Request-ID", "html-request-id")
 		w.Header().Set("X-Custom-Header", "html-custom-value")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(htmlResponse))
+		_, _ = w.Write([]byte(htmlResponse))
 	})
 
 	// Create the plugin handler
@@ -363,7 +476,7 @@ func TestInternalRequestPassThrough(t *testing.T) {
 	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(cardJSON)
+		_, _ = w.Write(cardJSON)
 	})
 
 	// Create the plugin handler
@@ -409,7 +522,7 @@ func TestExternalURLPreserved(t *testing.T) {
 	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(cardJSON)
+		_, _ = w.Write(cardJSON)
 	})
 
 	// Create the plugin handler
@@ -450,7 +563,7 @@ func TestResponseWriterCapture(t *testing.T) {
 
 	// Write status and body
 	rw.WriteHeader(http.StatusCreated)
-	rw.Write([]byte("test body"))
+	_, _ = rw.Write([]byte("test body"))
 
 	// Verify captured status
 	if rw.statusCode != http.StatusCreated {
@@ -467,7 +580,7 @@ func TestResponseWriterCapture(t *testing.T) {
 func TestEmptyAgentNamePassThrough(t *testing.T) {
 	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("backend response"))
+		_, _ = w.Write([]byte("backend response"))
 	})
 
 	// Create the plugin handler
@@ -491,5 +604,116 @@ func TestEmptyAgentNamePassThrough(t *testing.T) {
 	}
 	if rec.Body.String() != "backend response" {
 		t.Errorf("body = %q, want %q", rec.Body.String(), "backend response")
+	}
+}
+
+// TestConfigFallbackIntegration verifies config fallback works end-to-end
+func TestConfigFallbackIntegration(t *testing.T) {
+	tests := []struct {
+		name          string
+		configJSON    string
+		requestHost   string
+		expectedURL   string
+		shouldRewrite bool
+	}{
+		{
+			name: "internal cluster host with config fallback",
+			configJSON: `{
+				"agentcard_rw_config": {
+					"gateway_domain": "https://configured-gateway.example.com"
+				}
+			}`,
+			requestHost:   "agent-gateway.default.svc.cluster.local:10000",
+			expectedURL:   "https://configured-gateway.example.com/test-agent",
+			shouldRewrite: true,
+		},
+		{
+			name: "empty host with config fallback",
+			configJSON: `{
+				"agentcard_rw_config": {
+					"gateway_domain": "https://configured-gateway.example.com"
+				}
+			}`,
+			requestHost:   "",
+			expectedURL:   "https://configured-gateway.example.com/test-agent",
+			shouldRewrite: true,
+		},
+		{
+			name: "config with path prefix",
+			configJSON: `{
+				"agentcard_rw_config": {
+					"gateway_domain": "https://configured-gateway.example.com",
+					"path_prefix": "/agents"
+				}
+			}`,
+			requestHost:   "agent-gateway.default.svc.cluster.local:10000",
+			expectedURL:   "https://configured-gateway.example.com/agents/test-agent",
+			shouldRewrite: true,
+		},
+		{
+			name: "headers take precedence over config",
+			configJSON: `{
+				"agentcard_rw_config": {
+					"gateway_domain": "https://configured-gateway.example.com"
+				}
+			}`,
+			requestHost:   "header-gateway.example.com",
+			expectedURL:   "https://header-gateway.example.com/test-agent",
+			shouldRewrite: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a mock backend that returns an agent card with internal URLs
+			agentCard := models.AgentCard{
+				Name:    "Test Agent",
+				Url:     "http://test-agent.default.svc.cluster.local:8000/",
+				Version: "1.0.0",
+			}
+			cardJSON, _ := json.Marshal(agentCard)
+
+			backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(cardJSON)
+			})
+
+			// Parse config
+			var extraConfig map[string]interface{}
+			if err := json.Unmarshal([]byte(tt.configJSON), &extraConfig); err != nil {
+				t.Fatalf("failed to unmarshal config: %v", err)
+			}
+
+			// Create the plugin handler with config
+			handler, err := HandlerRegisterer.registerHandlers(context.Background(), extraConfig, backend)
+			if err != nil {
+				t.Fatalf("failed to register handler: %v", err)
+			}
+
+			// Create test request
+			req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
+			req.Host = tt.requestHost
+			req.Header.Set("X-Forwarded-Proto", "https")
+
+			// Record response
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			// Verify response
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
+			}
+
+			var responseCard models.AgentCard
+			if err := json.Unmarshal(rec.Body.Bytes(), &responseCard); err != nil {
+				t.Fatalf("failed to parse response: %v", err)
+			}
+
+			// Verify URL was rewritten correctly
+			if responseCard.Url != tt.expectedURL {
+				t.Errorf("card.Url = %q, want %q", responseCard.Url, tt.expectedURL)
+			}
+		})
 	}
 }

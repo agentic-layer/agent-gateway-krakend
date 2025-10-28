@@ -136,6 +136,7 @@ func TestGetGatewayDomain(t *testing.T) {
 		name        string
 		host        string
 		proto       string
+		cfg         config
 		expected    string
 		expectError bool
 	}{
@@ -143,6 +144,7 @@ func TestGetGatewayDomain(t *testing.T) {
 			name:        "https with explicit proto header",
 			host:        "gateway.agentic-layer.ai",
 			proto:       "https",
+			cfg:         config{},
 			expected:    "https://gateway.agentic-layer.ai",
 			expectError: false,
 		},
@@ -150,6 +152,7 @@ func TestGetGatewayDomain(t *testing.T) {
 			name:        "default https without proto header",
 			host:        "gateway.agentic-layer.ai",
 			proto:       "",
+			cfg:         config{},
 			expected:    "https://gateway.agentic-layer.ai",
 			expectError: false,
 		},
@@ -157,20 +160,23 @@ func TestGetGatewayDomain(t *testing.T) {
 			name:        "http proto header",
 			host:        "localhost:10000",
 			proto:       "http",
+			cfg:         config{},
 			expected:    "http://localhost:10000",
 			expectError: false,
 		},
 		{
-			name:        "internal cluster host should error",
+			name:        "internal cluster host with no config fallback should error",
 			host:        "agent-gateway.default.svc.cluster.local",
 			proto:       "https",
+			cfg:         config{},
 			expected:    "",
 			expectError: true,
 		},
 		{
-			name:        "empty host should error",
+			name:        "empty host with no config fallback should error",
 			host:        "",
 			proto:       "https",
+			cfg:         config{},
 			expected:    "",
 			expectError: true,
 		},
@@ -178,15 +184,47 @@ func TestGetGatewayDomain(t *testing.T) {
 			name:        "host with port",
 			host:        "gateway.agentic-layer.ai:443",
 			proto:       "https",
+			cfg:         config{},
 			expected:    "https://gateway.agentic-layer.ai:443",
 			expectError: false,
 		},
 		{
-			name:        "another internal cluster variant",
+			name:        "another internal cluster variant with no config",
 			host:        "service.namespace.svc.cluster.local:8080",
 			proto:       "http",
+			cfg:         config{},
 			expected:    "",
 			expectError: true,
+		},
+		{
+			name:  "internal cluster host with config fallback",
+			host:  "agent-gateway.default.svc.cluster.local",
+			proto: "https",
+			cfg: config{
+				GatewayDomain: "https://gateway.agentic-layer.ai",
+			},
+			expected:    "https://gateway.agentic-layer.ai",
+			expectError: false,
+		},
+		{
+			name:  "empty host with config fallback",
+			host:  "",
+			proto: "https",
+			cfg: config{
+				GatewayDomain: "https://configured-gateway.example.com",
+			},
+			expected:    "https://configured-gateway.example.com",
+			expectError: false,
+		},
+		{
+			name:  "headers take precedence over config",
+			host:  "gateway-from-header.example.com",
+			proto: "https",
+			cfg: config{
+				GatewayDomain: "https://gateway-from-config.example.com",
+			},
+			expected:    "https://gateway-from-header.example.com",
+			expectError: false,
 		},
 	}
 
@@ -200,7 +238,7 @@ func TestGetGatewayDomain(t *testing.T) {
 				req.Header.Set("X-Forwarded-Proto", tt.proto)
 			}
 
-			result, err := getGatewayDomain(req)
+			result, err := getGatewayDomain(req, tt.cfg)
 
 			if tt.expectError {
 				if err == nil {
