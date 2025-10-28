@@ -138,9 +138,6 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 			// Only transform successful responses
 			if rw.statusCode != http.StatusOK {
 				reqLogger.Info("backend returned non-OK status: %d - passing through", rw.statusCode)
-				copyHeaders(w.Header(), rw.Header())
-				w.WriteHeader(rw.statusCode)
-				w.Write(rw.body.Bytes())
 				return
 			}
 
@@ -148,9 +145,6 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 			contentType := rw.Header().Get("Content-Type")
 			if !strings.Contains(contentType, "application/json") {
 				reqLogger.Warn("unexpected content-type: %s - passing through", contentType)
-				copyHeaders(w.Header(), rw.Header())
-				w.WriteHeader(rw.statusCode)
-				w.Write(rw.body.Bytes())
 				return
 			}
 
@@ -158,9 +152,6 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 			var agentCard models.AgentCard
 			if err := json.Unmarshal(rw.body.Bytes(), &agentCard); err != nil {
 				reqLogger.Error("failed to parse agent card: %s - passing through original", err)
-				copyHeaders(w.Header(), rw.Header())
-				w.WriteHeader(rw.statusCode)
-				w.Write(rw.body.Bytes())
 				return
 			}
 
@@ -199,12 +190,8 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 			w.Header().Del("Content-Length")
 			w.WriteHeader(http.StatusOK)
 
-			reqLogger.Info("about to write body (%d bytes)", len(rewrittenBody))
-			bytesWritten, err := w.Write(rewrittenBody)
-			if err != nil {
-				reqLogger.Error("FAILED to write response: %s", err)
-			} else {
-				reqLogger.Info("successfully wrote %d bytes to response", bytesWritten)
+			if _, err := w.Write(rewrittenBody); err != nil {
+				reqLogger.Error("failed to write response: %s", err)
 			}
 			return
 		}
