@@ -61,3 +61,10 @@ func getGatewayDomain(req *http.Request) (string, error) {
 func isInternalURL(url string) bool {
 	return strings.Contains(url, ".svc.cluster.local")
 }
+
+// copyHeaders copies all headers from source to destination
+func copyHeaders(dst, src http.Header) {
+	for k, v := range src {
+		dst[k] = v
+	}
+}
