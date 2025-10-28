@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -13,7 +14,13 @@ import (
 
 const (
 	pluginName = "agentcard-rw"
+	configKey  = "agentcard_rw_config"
 )
+
+type config struct {
+	GatewayDomain string `json:"gateway_domain"` // e.g., "https://gateway.agentic-layer.ai"
+	PathPrefix    string `json:"path_prefix"`    // e.g., "/agents" (optional, defaults to "")
+}
 
 type registerer string
 
@@ -59,12 +66,44 @@ func (rw *responseWriter) WriteHeader(statusCode int) {
 	rw.statusCode = statusCode
 }
 
-func (r registerer) registerHandlers(_ context.Context, extra map[string]interface{}, handler http.Handler) (http.Handler, error) {
-	// No configuration needed - plugin auto-detects gateway domain from request headers
-	return http.HandlerFunc(r.handleRequest(handler)), nil
+// parseConfig parses plugin configuration from KrakenD extra_config
+func parseConfig(extra map[string]interface{}, cfg *config) error {
+	// If no config provided, return empty config (use header auto-detection only)
+	if extra[configKey] == nil {
+		logger.Info("no configuration provided, using header auto-detection only")
+		return nil
+	}
+
+	pluginConfig, ok := extra[configKey].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("cannot read extra_config.%s", configKey)
+	}
+
+	raw, err := json.Marshal(pluginConfig)
+	if err != nil {
+		return fmt.Errorf("cannot marshal extra config back to JSON: %s", err.Error())
+	}
+
+	err = json.Unmarshal(raw, cfg)
+	if err != nil {
+		return fmt.Errorf("cannot parse extra config: %s", err.Error())
+	}
+
+	logger.Info("configuration loaded: gateway_domain=%s, path_prefix=%s", cfg.GatewayDomain, cfg.PathPrefix)
+	return nil
 }
 
-func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWriter, req *http.Request) {
+func (r registerer) registerHandlers(_ context.Context, extra map[string]interface{}, handler http.Handler) (http.Handler, error) {
+	var cfg config
+	err := parseConfig(extra, &cfg)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("configuration loaded successfully")
+	return http.HandlerFunc(r.handleRequest(cfg, handler)), nil
+}
+
+func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {
 		reqLogger := logging.NewWithPluginName(pluginName)
 
@@ -72,8 +111,8 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 		if req.Method == http.MethodGet && isAgentCardEndpoint(req.URL.Path) {
 			reqLogger.Info("intercepted agent card request: %s", req.URL.Path)
 
-			// Get gateway domain from request headers
-			gatewayDomain, err := getGatewayDomain(req)
+			// Get gateway domain from request headers (with config fallback)
+			gatewayDomain, err := getGatewayDomain(req, cfg)
 			if err != nil {
 				reqLogger.Warn("cannot determine gateway domain: %s - passing through", err)
 				handler.ServeHTTP(w, req)
@@ -134,7 +173,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			}
 
 			// Rewrite agent card URLs
-			agentCard = rewriteAgentCard(agentCard, gatewayDomain, agentName)
+			agentCard = rewriteAgentCard(agentCard, gatewayDomain, agentName, cfg.PathPrefix)
 
 			// Marshal rewritten agent card
 			rewrittenBody, err := json.Marshal(agentCard)
@@ -155,13 +194,9 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			reqLogger.Info("rewritten body size: %d bytes, preview: %s", len(rewrittenBody), bodyPreview)
 
 			// Write the transformed response (following openai-a2a plugin pattern)
-			// First copy backend headers to preserve metadata like X-Request-ID, CORS headers, etc.
-			copyHeaders(w.Header(), rw.Header())
-			// Then set/override headers specific to the transformed response
 			w.Header().Set("Content-Type", "application/json")
 			// Remove Content-Length to allow for recalculation
 			w.Header().Del("Content-Length")
-			reqLogger.Info("about to write header with status 200")
 			w.WriteHeader(http.StatusOK)
 
 			reqLogger.Info("about to write body (%d bytes)", len(rewrittenBody))
