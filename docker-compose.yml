@@ -8,7 +8,7 @@ services:
     image: agentic-layer/agent-gateway-krakend:latest
     container_name: agent-gateway-krakend
     ports:
-      - "8080:8080"
+      - "10000:10000"
     volumes:
       - ./local/krakend.json:/etc/krakend/krakend.json:ro
     restart: unless-stopped
