@@ -16,15 +16,9 @@ const (
 	configStrMinimal = `{
 		"agentcard_rw_config": {}
 	}`
-	configStrWithDomain = `{
+	configStrWithURL = `{
 		"agentcard_rw_config": {
-			"gateway_domain": "https://configured-gateway.example.com"
-		}
-	}`
-	configStrWithPrefix = `{
-		"agentcard_rw_config": {
-			"gateway_domain": "https://configured-gateway.example.com",
-			"path_prefix": "/agents"
+			"gateway_url": "https://configured-gateway.example.com"
 		}
 	}`
 	configStrInvalidConfig = `{
@@ -45,11 +39,8 @@ func TestParseConfig(t *testing.T) {
 			configJSON:  configStrEmpty,
 			expectError: false,
 			checkFunc: func(t *testing.T, cfg config) {
-				if cfg.GatewayDomain != "" {
-					t.Errorf("GatewayDomain = %q, want empty", cfg.GatewayDomain)
-				}
-				if cfg.PathPrefix != "" {
-					t.Errorf("PathPrefix = %q, want empty", cfg.PathPrefix)
+				if cfg.GatewayURL != "" {
+					t.Errorf("GatewayURL = %q, want empty", cfg.GatewayURL)
 				}
 			},
 		},
@@ -58,40 +49,19 @@ func TestParseConfig(t *testing.T) {
 			configJSON:  configStrMinimal,
 			expectError: false,
 			checkFunc: func(t *testing.T, cfg config) {
-				if cfg.GatewayDomain != "" {
-					t.Errorf("GatewayDomain = %q, want empty", cfg.GatewayDomain)
-				}
-				if cfg.PathPrefix != "" {
-					t.Errorf("PathPrefix = %q, want empty", cfg.PathPrefix)
+				if cfg.GatewayURL != "" {
+					t.Errorf("GatewayURL = %q, want empty", cfg.GatewayURL)
 				}
 			},
 		},
 		{
-			name:        "config with gateway_domain",
-			configJSON:  configStrWithDomain,
+			name:        "config with gateway_url",
+			configJSON:  configStrWithURL,
 			expectError: false,
 			checkFunc: func(t *testing.T, cfg config) {
 				expected := "https://configured-gateway.example.com"
-				if cfg.GatewayDomain != expected {
-					t.Errorf("GatewayDomain = %q, want %q", cfg.GatewayDomain, expected)
-				}
-				if cfg.PathPrefix != "" {
-					t.Errorf("PathPrefix = %q, want empty", cfg.PathPrefix)
-				}
-			},
-		},
-		{
-			name:        "config with gateway_domain and path_prefix",
-			configJSON:  configStrWithPrefix,
-			expectError: false,
-			checkFunc: func(t *testing.T, cfg config) {
-				expectedDomain := "https://configured-gateway.example.com"
-				expectedPrefix := "/agents"
-				if cfg.GatewayDomain != expectedDomain {
-					t.Errorf("GatewayDomain = %q, want %q", cfg.GatewayDomain, expectedDomain)
-				}
-				if cfg.PathPrefix != expectedPrefix {
-					t.Errorf("PathPrefix = %q, want %q", cfg.PathPrefix, expectedPrefix)
+				if cfg.GatewayURL != expected {
+					t.Errorf("GatewayURL = %q, want %q", cfg.GatewayURL, expected)
 				}
 			},
 		},
@@ -580,7 +550,7 @@ func TestConfigFallbackIntegration(t *testing.T) {
 			name: "internal cluster host with config fallback",
 			configJSON: `{
 				"agentcard_rw_config": {
-					"gateway_domain": "https://configured-gateway.example.com"
+					"gateway_url": "https://configured-gateway.example.com"
 				}
 			}`,
 			requestHost:   "agent-gateway.default.svc.cluster.local:10000",
@@ -591,7 +561,7 @@ func TestConfigFallbackIntegration(t *testing.T) {
 			name: "empty host with config fallback",
 			configJSON: `{
 				"agentcard_rw_config": {
-					"gateway_domain": "https://configured-gateway.example.com"
+					"gateway_url": "https://configured-gateway.example.com"
 				}
 			}`,
 			requestHost:   "",
@@ -599,22 +569,10 @@ func TestConfigFallbackIntegration(t *testing.T) {
 			shouldRewrite: true,
 		},
 		{
-			name: "config with path prefix",
-			configJSON: `{
-				"agentcard_rw_config": {
-					"gateway_domain": "https://configured-gateway.example.com",
-					"path_prefix": "/agents"
-				}
-			}`,
-			requestHost:   "agent-gateway.default.svc.cluster.local:10000",
-			expectedURL:   "https://configured-gateway.example.com/agents/test-agent",
-			shouldRewrite: true,
-		},
-		{
 			name: "headers take precedence over config",
 			configJSON: `{
 				"agentcard_rw_config": {
-					"gateway_domain": "https://configured-gateway.example.com"
+					"gateway_url": "https://configured-gateway.example.com"
 				}
 			}`,
 			requestHost:   "header-gateway.example.com",

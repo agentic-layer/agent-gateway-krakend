@@ -210,7 +210,7 @@ curl -H "Host: gateway.agentic-layer.ai" \
 ```
 </details>
 
-> **Note**: In production, the ingress/load balancer sets the `Host` header (e.g., `gateway.agentic-layer.ai`), which takes precedence over the configured `gateway_domain`. The config provides a fallback for local testing.
+> **Note**: In production, the ingress/load balancer sets the `Host` header (e.g., `gateway.agentic-layer.ai`), which takes precedence over the configured `gateway_url`. The config provides a fallback for local testing.
 
 ## Contribution
 

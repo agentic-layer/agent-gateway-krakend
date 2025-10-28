@@ -68,7 +68,7 @@ func TestIsAgentCardEndpoint(t *testing.T) {
 	}
 }
 
-func TestExtractAgentName(t *testing.T) {
+func TestExtractAgentPath(t *testing.T) {
 	tests := []struct {
 		name     string
 		path     string
@@ -77,22 +77,32 @@ func TestExtractAgentName(t *testing.T) {
 		{
 			name:     "weather agent",
 			path:     "/weather-agent/.well-known/agent-card.json",
-			expected: "weather-agent",
+			expected: "/weather-agent",
 		},
 		{
 			name:     "cross-selling agent",
 			path:     "/cross-selling-agent/.well-known/agent-card.json",
-			expected: "cross-selling-agent",
+			expected: "/cross-selling-agent",
 		},
 		{
 			name:     "agent with multiple hyphens",
 			path:     "/agent-name-with-hyphens/.well-known/agent-card.json",
-			expected: "agent-name-with-hyphens",
+			expected: "/agent-name-with-hyphens",
 		},
 		{
 			name:     "insurance host agent",
 			path:     "/insurance-host-agent/.well-known/agent-card.json",
-			expected: "insurance-host-agent",
+			expected: "/insurance-host-agent",
+		},
+		{
+			name:     "nested path with multiple segments",
+			path:     "/agents/weather-agent/.well-known/agent-card.json",
+			expected: "/agents/weather-agent",
+		},
+		{
+			name:     "deeply nested path",
+			path:     "/api/v1/agents/weather-agent/.well-known/agent-card.json",
+			expected: "/api/v1/agents/weather-agent",
 		},
 		{
 			name:     "root well-known",
@@ -100,9 +110,9 @@ func TestExtractAgentName(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:     "single path component",
-			path:     "/single",
-			expected: "single",
+			name:     "path without well-known",
+			path:     "/weather-agent/some/other/path",
+			expected: "",
 		},
 		{
 			name:     "empty path",
@@ -114,24 +124,19 @@ func TestExtractAgentName(t *testing.T) {
 			path:     "/",
 			expected: "",
 		},
-		{
-			name:     "agent without well-known",
-			path:     "/weather-agent/some/other/path",
-			expected: "weather-agent",
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractAgentName(tt.path)
+			result := extractAgentPath(tt.path)
 			if result != tt.expected {
-				t.Errorf("extractAgentName(%q) = %q, want %q", tt.path, result, tt.expected)
+				t.Errorf("extractAgentPath(%q) = %q, want %q", tt.path, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestGetGatewayDomain(t *testing.T) {
+func TestGetGatewayURL(t *testing.T) {
 	tests := []struct {
 		name        string
 		host        string
@@ -201,7 +206,7 @@ func TestGetGatewayDomain(t *testing.T) {
 			host:  "agent-gateway.default.svc.cluster.local",
 			proto: "https",
 			cfg: config{
-				GatewayDomain: "https://gateway.agentic-layer.ai",
+				GatewayURL: "https://gateway.agentic-layer.ai",
 			},
 			expected:    "https://gateway.agentic-layer.ai",
 			expectError: false,
@@ -211,7 +216,7 @@ func TestGetGatewayDomain(t *testing.T) {
 			host:  "",
 			proto: "https",
 			cfg: config{
-				GatewayDomain: "https://configured-gateway.example.com",
+				GatewayURL: "https://configured-gateway.example.com",
 			},
 			expected:    "https://configured-gateway.example.com",
 			expectError: false,
@@ -221,7 +226,7 @@ func TestGetGatewayDomain(t *testing.T) {
 			host:  "gateway-from-header.example.com",
 			proto: "https",
 			cfg: config{
-				GatewayDomain: "https://gateway-from-config.example.com",
+				GatewayURL: "https://gateway-from-config.example.com",
 			},
 			expected:    "https://gateway-from-header.example.com",
 			expectError: false,
@@ -238,18 +243,18 @@ func TestGetGatewayDomain(t *testing.T) {
 				req.Header.Set("X-Forwarded-Proto", tt.proto)
 			}
 
-			result, err := getGatewayDomain(req, tt.cfg)
+			result, err := getGatewayURL(req, tt.cfg)
 
 			if tt.expectError {
 				if err == nil {
-					t.Errorf("getGatewayDomain() expected error but got none, result = %q", result)
+					t.Errorf("getGatewayURL() expected error but got none, result = %q", result)
 				}
 			} else {
 				if err != nil {
-					t.Errorf("getGatewayDomain() unexpected error: %v", err)
+					t.Errorf("getGatewayURL() unexpected error: %v", err)
 				}
 				if result != tt.expected {
-					t.Errorf("getGatewayDomain() = %q, want %q", result, tt.expected)
+					t.Errorf("getGatewayURL() = %q, want %q", result, tt.expected)
 				}
 			}
 		})

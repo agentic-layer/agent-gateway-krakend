@@ -6,17 +6,13 @@ import (
 	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
 )
 
-// constructExternalURL builds the external gateway URL from domain, agent name, and optional path prefix
-func constructExternalURL(gatewayDomain string, agentName string, pathPrefix string) string {
+// constructExternalURL builds the external gateway URL from gateway URL and agent path
+func constructExternalURL(gatewayURL string, agentPath string) string {
 	// Remove trailing slashes
-	gatewayDomain = strings.TrimSuffix(gatewayDomain, "/")
-	pathPrefix = strings.TrimSuffix(pathPrefix, "/")
+	gatewayURL = strings.TrimSuffix(gatewayURL, "/")
+	agentPath = strings.TrimSuffix(agentPath, "/")
 
-	// Build URL with optional path prefix
-	if pathPrefix != "" {
-		return gatewayDomain + pathPrefix + "/" + agentName
-	}
-	return gatewayDomain + "/" + agentName
+	return gatewayURL + agentPath
 }
 
 // checkProviderURL checks if the provider URL is suspiciously internal
@@ -37,9 +33,9 @@ func checkProviderURL(providerURL string) (bool, string) {
 // - Keeps only HTTP/HTTPS transports
 // - Rewrites internal URLs to external gateway URLs
 // - Removes unsupported transports (gRPC, WebSocket, SSE, etc.)
-func rewriteAdditionalInterfaces(interfaces []models.AgentInterface, gatewayDomain string, agentName string, pathPrefix string) []models.AgentInterface {
+func rewriteAdditionalInterfaces(interfaces []models.AgentInterface, gatewayURL string, agentPath string) []models.AgentInterface {
 	var result []models.AgentInterface
-	externalURL := constructExternalURL(gatewayDomain, agentName, pathPrefix)
+	externalURL := constructExternalURL(gatewayURL, agentPath)
 
 	for _, iface := range interfaces {
 		// Only keep http and https transports
@@ -57,8 +53,8 @@ func rewriteAdditionalInterfaces(interfaces []models.AgentInterface, gatewayDoma
 }
 
 // rewriteAgentCard transforms internal URLs to external gateway URLs in an agent card
-func rewriteAgentCard(card models.AgentCard, gatewayDomain string, agentName string, pathPrefix string) models.AgentCard {
-	externalURL := constructExternalURL(gatewayDomain, agentName, pathPrefix)
+func rewriteAgentCard(card models.AgentCard, gatewayURL string, agentPath string) models.AgentCard {
+	externalURL := constructExternalURL(gatewayURL, agentPath)
 
 	// Rewrite main URL if it's internal
 	if isInternalURL(card.Url) {
@@ -66,7 +62,7 @@ func rewriteAgentCard(card models.AgentCard, gatewayDomain string, agentName str
 	}
 
 	// Rewrite and filter additional interfaces
-	card.AdditionalInterfaces = rewriteAdditionalInterfaces(card.AdditionalInterfaces, gatewayDomain, agentName, pathPrefix)
+	card.AdditionalInterfaces = rewriteAdditionalInterfaces(card.AdditionalInterfaces, gatewayURL, agentPath)
 
 	// Provider URL is never rewritten (it's organizational metadata, not an agent endpoint)
 

@@ -8,76 +8,67 @@ import (
 
 func TestConstructExternalURL(t *testing.T) {
 	tests := []struct {
-		name          string
-		gatewayDomain string
-		agentName     string
-		pathPrefix    string
-		expected      string
+		name       string
+		gatewayURL string
+		agentPath  string
+		expected   string
 	}{
 		{
-			name:          "basic construction without prefix",
-			gatewayDomain: "https://gateway.agentic-layer.ai",
-			agentName:     "weather-agent",
-			pathPrefix:    "",
-			expected:      "https://gateway.agentic-layer.ai/weather-agent",
+			name:       "basic construction",
+			gatewayURL: "https://gateway.agentic-layer.ai",
+			agentPath:  "/weather-agent",
+			expected:   "https://gateway.agentic-layer.ai/weather-agent",
 		},
 		{
-			name:          "gateway domain with trailing slash",
-			gatewayDomain: "https://gateway.agentic-layer.ai/",
-			agentName:     "agent",
-			pathPrefix:    "",
-			expected:      "https://gateway.agentic-layer.ai/agent",
+			name:       "gateway URL with trailing slash",
+			gatewayURL: "https://gateway.agentic-layer.ai/",
+			agentPath:  "/agent",
+			expected:   "https://gateway.agentic-layer.ai/agent",
 		},
 		{
-			name:          "localhost without prefix",
-			gatewayDomain: "http://localhost:10000",
-			agentName:     "test-agent",
-			pathPrefix:    "",
-			expected:      "http://localhost:10000/test-agent",
+			name:       "localhost",
+			gatewayURL: "http://localhost:10000",
+			agentPath:  "/test-agent",
+			expected:   "http://localhost:10000/test-agent",
 		},
 		{
-			name:          "agent with hyphens",
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "cross-selling-agent",
-			pathPrefix:    "",
-			expected:      "https://gateway.ai/cross-selling-agent",
+			name:       "agent with hyphens",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/cross-selling-agent",
+			expected:   "https://gateway.ai/cross-selling-agent",
 		},
 		{
-			name:          "with /agents prefix",
-			gatewayDomain: "https://gateway.agentic-layer.ai",
-			agentName:     "weather-agent",
-			pathPrefix:    "/agents",
-			expected:      "https://gateway.agentic-layer.ai/agents/weather-agent",
+			name:       "nested path with multiple segments",
+			gatewayURL: "https://gateway.agentic-layer.ai",
+			agentPath:  "/agents/weather-agent",
+			expected:   "https://gateway.agentic-layer.ai/agents/weather-agent",
 		},
 		{
-			name:          "with /api/v1/agents prefix",
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
-			pathPrefix:    "/api/v1/agents",
-			expected:      "https://gateway.ai/api/v1/agents/test-agent",
+			name:       "deeply nested path",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/api/v1/agents/test-agent",
+			expected:   "https://gateway.ai/api/v1/agents/test-agent",
 		},
 		{
-			name:          "prefix with trailing slash",
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
-			pathPrefix:    "/agents/",
-			expected:      "https://gateway.ai/agents/test-agent",
+			name:       "agent path with trailing slash",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent/",
+			expected:   "https://gateway.ai/test-agent",
 		},
 		{
-			name:          "both trailing slashes",
-			gatewayDomain: "https://gateway.ai/",
-			agentName:     "test-agent",
-			pathPrefix:    "/agents/",
-			expected:      "https://gateway.ai/agents/test-agent",
+			name:       "both trailing slashes",
+			gatewayURL: "https://gateway.ai/",
+			agentPath:  "/agents/test-agent/",
+			expected:   "https://gateway.ai/agents/test-agent",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := constructExternalURL(tt.gatewayDomain, tt.agentName, tt.pathPrefix)
+			result := constructExternalURL(tt.gatewayURL, tt.agentPath)
 			if result != tt.expected {
-				t.Errorf("constructExternalURL(%q, %q, %q) = %q, want %q",
-					tt.gatewayDomain, tt.agentName, tt.pathPrefix, result, tt.expected)
+				t.Errorf("constructExternalURL(%q, %q) = %q, want %q",
+					tt.gatewayURL, tt.agentPath, result, tt.expected)
 			}
 		})
 	}
@@ -137,11 +128,11 @@ func TestCheckProviderURL(t *testing.T) {
 
 func TestRewriteAdditionalInterfaces(t *testing.T) {
 	tests := []struct {
-		name          string
-		interfaces    []models.AgentInterface
-		gatewayDomain string
-		agentName     string
-		expected      []models.AgentInterface
+		name       string
+		interfaces []models.AgentInterface
+		gatewayURL string
+		agentPath  string
+		expected   []models.AgentInterface
 	}{
 		{
 			name: "rewrite internal http and https, remove grpc",
@@ -150,8 +141,8 @@ func TestRewriteAdditionalInterfaces(t *testing.T) {
 				{Transport: "https", Url: "https://agent.svc.cluster.local:8443/"},
 				{Transport: "grpc", Url: "http://agent.svc.cluster.local:9000/"},
 			},
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent",
 			expected: []models.AgentInterface{
 				{Transport: "http", Url: "https://gateway.ai/test-agent"},
 				{Transport: "https", Url: "https://gateway.ai/test-agent"},
@@ -163,8 +154,8 @@ func TestRewriteAdditionalInterfaces(t *testing.T) {
 				{Transport: "http", Url: "https://external.example.com/agent"},
 				{Transport: "http", Url: "http://agent.svc.cluster.local:8000/"},
 			},
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent",
 			expected: []models.AgentInterface{
 				{Transport: "http", Url: "https://external.example.com/agent"},
 				{Transport: "http", Url: "https://gateway.ai/test-agent"},
@@ -177,16 +168,16 @@ func TestRewriteAdditionalInterfaces(t *testing.T) {
 				{Transport: "websocket", Url: "ws://agent.svc.cluster.local:8080/"},
 				{Transport: "sse", Url: "http://agent.svc.cluster.local:8000/events"},
 			},
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
-			expected:      []models.AgentInterface{},
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent",
+			expected:   []models.AgentInterface{},
 		},
 		{
-			name:          "empty interfaces",
-			interfaces:    []models.AgentInterface{},
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
-			expected:      []models.AgentInterface{},
+			name:       "empty interfaces",
+			interfaces: []models.AgentInterface{},
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent",
+			expected:   []models.AgentInterface{},
 		},
 		{
 			name: "only keep http and https",
@@ -195,8 +186,8 @@ func TestRewriteAdditionalInterfaces(t *testing.T) {
 				{Transport: "JSONRPC", Url: "http://agent.svc.cluster.local:8000/"},
 				{Transport: "HTTP+JSON", Url: "http://agent.svc.cluster.local:8000/"},
 			},
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent",
 			expected: []models.AgentInterface{
 				{Transport: "http", Url: "https://gateway.ai/test-agent"},
 			},
@@ -205,7 +196,7 @@ func TestRewriteAdditionalInterfaces(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := rewriteAdditionalInterfaces(tt.interfaces, tt.gatewayDomain, tt.agentName, "")
+			result := rewriteAdditionalInterfaces(tt.interfaces, tt.gatewayURL, tt.agentPath)
 
 			if len(result) != len(tt.expected) {
 				t.Errorf("rewriteAdditionalInterfaces() returned %d interfaces, want %d",
@@ -229,11 +220,11 @@ func TestRewriteAdditionalInterfaces(t *testing.T) {
 
 func TestRewriteAgentCard(t *testing.T) {
 	tests := []struct {
-		name          string
-		card          models.AgentCard
-		gatewayDomain string
-		agentName     string
-		checkFunc     func(t *testing.T, result models.AgentCard)
+		name       string
+		card       models.AgentCard
+		gatewayURL string
+		agentPath  string
+		checkFunc  func(t *testing.T, result models.AgentCard)
 	}{
 		{
 			name: "rewrite internal main URL",
@@ -243,8 +234,8 @@ func TestRewriteAgentCard(t *testing.T) {
 				Url:         "http://agent.default.svc.cluster.local:8000/",
 				Version:     "1.0.0",
 			},
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent",
 			checkFunc: func(t *testing.T, result models.AgentCard) {
 				if result.Url != "https://gateway.ai/test-agent" {
 					t.Errorf("card.Url = %q, want %q", result.Url, "https://gateway.ai/test-agent")
@@ -260,8 +251,8 @@ func TestRewriteAgentCard(t *testing.T) {
 				Url:     "https://external.example.com/agent",
 				Version: "1.0.0",
 			},
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent",
 			checkFunc: func(t *testing.T, result models.AgentCard) {
 				if result.Url != "https://external.example.com/agent" {
 					t.Errorf("card.Url = %q, want unchanged", result.Url)
@@ -278,8 +269,8 @@ func TestRewriteAgentCard(t *testing.T) {
 					{Transport: "grpc", Url: "http://agent.svc.cluster.local:9000/"},
 				},
 			},
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent",
 			checkFunc: func(t *testing.T, result models.AgentCard) {
 				if len(result.AdditionalInterfaces) != 1 {
 					t.Errorf("len(AdditionalInterfaces) = %d, want 1", len(result.AdditionalInterfaces))
@@ -303,8 +294,8 @@ func TestRewriteAgentCard(t *testing.T) {
 					Url:          "https://qaware.de",
 				},
 			},
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent",
 			checkFunc: func(t *testing.T, result models.AgentCard) {
 				if result.Provider == nil {
 					t.Errorf("Provider is nil")
@@ -327,8 +318,8 @@ func TestRewriteAgentCard(t *testing.T) {
 				DefaultOutputModes: []string{"text/plain"},
 				Skills:             []models.AgentSkill{{Id: "test-skill", Name: "Test Skill", Tags: []string{"test"}}},
 			},
-			gatewayDomain: "https://gateway.ai",
-			agentName:     "test-agent",
+			gatewayURL: "https://gateway.ai",
+			agentPath:  "/test-agent",
 			checkFunc: func(t *testing.T, result models.AgentCard) {
 				if result.Name != "Test Agent" {
 					t.Errorf("Name changed")
@@ -351,7 +342,7 @@ func TestRewriteAgentCard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := rewriteAgentCard(tt.card, tt.gatewayDomain, tt.agentName, "")
+			result := rewriteAgentCard(tt.card, tt.gatewayURL, tt.agentPath)
 			tt.checkFunc(t, result)
 		})
 	}

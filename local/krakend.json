@@ -14,7 +14,7 @@
       ],
       "agentcard-rw": {
         "agentcard_rw_config": {
-          "gateway_domain": "https://gateway.agentic-layer.ai"
+          "gateway_url": "https://gateway.agentic-layer.ai"
         }
       }
     },

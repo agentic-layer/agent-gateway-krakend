@@ -11,33 +11,26 @@ func isAgentCardEndpoint(path string) bool {
 	return strings.HasSuffix(path, "/.well-known/agent-card.json")
 }
 
-// extractAgentName extracts the agent name from the request path
-// Example: "/weather-agent/.well-known/agent-card.json" -> "weather-agent"
-func extractAgentName(path string) string {
-	// Remove leading slash
-	path = strings.TrimPrefix(path, "/")
-
-	// Empty path after trimming
-	if path == "" {
-		return ""
+// extractAgentPath extracts the full agent path from the request path (everything before /.well-known)
+// Examples:
+//
+//	"/weather-agent/.well-known/agent-card.json" -> "/weather-agent"
+//	"/agents/weather-agent/.well-known/agent-card.json" -> "/agents/weather-agent"
+//	"/api/v1/agents/weather-agent/.well-known/agent-card.json" -> "/api/v1/agents/weather-agent"
+func extractAgentPath(path string) string {
+	// Find the position of /.well-known
+	idx := strings.Index(path, "/.well-known")
+	if idx > 0 {
+		return path[:idx]
 	}
 
-	// Split by slash and get first component
-	parts := strings.Split(path, "/")
-	if len(parts) > 0 && parts[0] != "" {
-		// If the first part is .well-known, there's no agent name
-		if parts[0] == ".well-known" {
-			return ""
-		}
-		return parts[0]
-	}
-
+	// If /.well-known is at the start or not found, return empty
 	return ""
 }
 
-// getGatewayDomain extracts the gateway domain from request headers with config fallback
+// getGatewayURL extracts the gateway URL from request headers with config fallback
 // Returns the full URL scheme + host, or an error if it cannot be determined
-func getGatewayDomain(req *http.Request, cfg config) (string, error) {
+func getGatewayURL(req *http.Request, cfg config) (string, error) {
 	host := req.Host
 
 	// Try header detection first
@@ -50,16 +43,16 @@ func getGatewayDomain(req *http.Request, cfg config) (string, error) {
 		return fmt.Sprintf("%s://%s", scheme, host), nil
 	}
 
-	// Fallback to configured gateway domain
-	if cfg.GatewayDomain != "" {
-		return cfg.GatewayDomain, nil
+	// Fallback to configured gateway URL
+	if cfg.GatewayURL != "" {
+		return cfg.GatewayURL, nil
 	}
 
 	// Both methods failed
 	if host == "" {
-		return "", fmt.Errorf("Host header not present and no gateway_domain configured")
+		return "", fmt.Errorf("Host header not present and no gateway_url configured")
 	}
-	return "", fmt.Errorf("internal cluster request and no gateway_domain configured")
+	return "", fmt.Errorf("internal cluster request and no gateway_url configured")
 }
 
 // isInternalURL checks if a URL is an internal Kubernetes cluster URL
