@@ -5,13 +5,18 @@
     "pattern": ".so",
     "folder": "/unleash/tentacles/"
   },
-  "port": 8080,
+  "port": 10000,
   "extra_config": {
     "plugin/http-server": {
       "@comment_name": "Name order defines handler order. Last entry is outermost/first handler.",
       "name": [
-        "openai-a2a"
-      ]
+        "openai-a2a", "agentcard-rw"
+      ],
+      "agentcard-rw": {
+        "agentcard_rw_config": {
+          "gateway_domain": "https://gateway.agentic-layer.ai"
+        }
+      }
     },
     "router": {
       "disable_access_log": false,
@@ -23,6 +28,19 @@
   "name": "agent-gateway-krakend",
   "endpoints": [
     {
+      "endpoint": "/weather-agent/.well-known/agent-card.json",
+      "output_encoding": "no-op",
+      "method": "GET",
+      "backend": [
+        {
+          "host": [
+            "http://host.docker.internal:8000"
+          ],
+          "url_pattern": "/.well-known/agent-card.json"
+        }
+      ]
+    },
+    {
       "endpoint": "/weather-agent",
       "output_encoding": "no-op",
       "method": "POST",
@@ -30,6 +48,32 @@
         {
           "host": [
             "http://host.docker.internal:8000"
+          ],
+          "url_pattern": ""
+        }
+      ]
+    },
+    {
+      "endpoint": "/mock-agent/.well-known/agent-card.json",
+      "output_encoding": "no-op",
+      "method": "GET",
+      "backend": [
+        {
+          "host": [
+            "http://host.docker.internal:8080"
+          ],
+          "url_pattern": "/.well-known/agent-card.json"
+        }
+      ]
+    },
+    {
+      "endpoint": "/mock-agent",
+      "output_encoding": "no-op",
+      "method": "POST",
+      "backend": [
+        {
+          "host": [
+            "http://host.docker.internal:8080"
           ],
           "url_pattern": ""
         }
