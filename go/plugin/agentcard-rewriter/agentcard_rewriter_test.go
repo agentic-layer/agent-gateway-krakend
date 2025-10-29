@@ -635,3 +635,112 @@ func TestConfigFallbackIntegration(t *testing.T) {
 		})
 	}
 }
+
+// TestUnknownFieldPreservation verifies that unknown fields in agent cards are preserved
+func TestUnknownFieldPreservation(t *testing.T) {
+	// Create an agent card JSON with custom unknown fields
+	agentCardJSON := `{
+		"name": "Test Agent",
+		"description": "A test agent",
+		"url": "http://test-agent.default.svc.cluster.local:8000/",
+		"version": "1.0.0",
+		"x-custom-metadata": {
+			"vendor": "ACME Corp",
+			"license": "proprietary"
+		},
+		"experimental-feature": "enabled",
+		"customArray": [1, 2, 3],
+		"additionalInterfaces": [
+			{
+				"transport": "http",
+				"url": "http://test-agent.default.svc.cluster.local:8000/",
+				"customField": "should-be-preserved"
+			},
+			{
+				"transport": "grpc",
+				"url": "http://test-agent.default.svc.cluster.local:9000/"
+			}
+		]
+	}`
+
+	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(agentCardJSON))
+	})
+
+	// Create the plugin handler
+	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
+	if err != nil {
+		t.Fatalf("failed to register handler: %v", err)
+	}
+
+	// Create test request
+	req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
+	req.Host = "gateway.agentic-layer.ai"
+	req.Header.Set("X-Forwarded-Proto", "https")
+
+	// Record response
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	// Verify response
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Parse response as generic map to check all fields
+	var responseMap map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &responseMap); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	// Verify URL was rewritten
+	if responseMap["url"] != "https://gateway.agentic-layer.ai/test-agent" {
+		t.Errorf("url = %v, want %q", responseMap["url"], "https://gateway.agentic-layer.ai/test-agent")
+	}
+
+	// Verify unknown fields are preserved
+	if _, ok := responseMap["x-custom-metadata"]; !ok {
+		t.Error("x-custom-metadata field was lost")
+	} else {
+		metadata := responseMap["x-custom-metadata"].(map[string]interface{})
+		if metadata["vendor"] != "ACME Corp" {
+			t.Errorf("x-custom-metadata.vendor = %v, want 'ACME Corp'", metadata["vendor"])
+		}
+		if metadata["license"] != "proprietary" {
+			t.Errorf("x-custom-metadata.license = %v, want 'proprietary'", metadata["license"])
+		}
+	}
+
+	if responseMap["experimental-feature"] != "enabled" {
+		t.Errorf("experimental-feature = %v, want 'enabled'", responseMap["experimental-feature"])
+	}
+
+	if customArray, ok := responseMap["customArray"].([]interface{}); !ok {
+		t.Error("customArray field was lost or wrong type")
+	} else if len(customArray) != 3 {
+		t.Errorf("customArray length = %d, want 3", len(customArray))
+	}
+
+	// Verify additionalInterfaces filtering still works and custom fields in interfaces are preserved
+	if interfaces, ok := responseMap["additionalInterfaces"].([]interface{}); !ok {
+		t.Error("additionalInterfaces field was lost")
+	} else {
+		if len(interfaces) != 1 {
+			t.Errorf("additionalInterfaces length = %d, want 1 (grpc should be filtered out)", len(interfaces))
+		}
+		if len(interfaces) > 0 {
+			iface := interfaces[0].(map[string]interface{})
+			if iface["transport"] != "http" {
+				t.Errorf("interface transport = %v, want 'http'", iface["transport"])
+			}
+			if iface["url"] != "https://gateway.agentic-layer.ai/test-agent" {
+				t.Errorf("interface url = %v, want rewritten URL", iface["url"])
+			}
+			if iface["customField"] != "should-be-preserved" {
+				t.Errorf("interface customField = %v, want 'should-be-preserved'", iface["customField"])
+			}
+		}
+	}
+}

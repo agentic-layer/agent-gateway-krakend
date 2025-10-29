@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/agentic-layer/agent-gateway-krakend/lib/logging"
-	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
 )
 
 const (
@@ -147,26 +146,28 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 				return
 			}
 
-			// Parse agent card
-			var agentCard models.AgentCard
-			if err := json.Unmarshal(rw.body.Bytes(), &agentCard); err != nil {
+			// Parse agent card into map to preserve unknown fields
+			var agentCardMap map[string]interface{}
+			if err := json.Unmarshal(rw.body.Bytes(), &agentCardMap); err != nil {
 				reqLogger.Error("failed to parse agent card: %s - passing through original", err)
 				return
 			}
 
 			// Check provider URL for suspicious internal URLs
-			if agentCard.Provider != nil && agentCard.Provider.Url != "" {
-				if shouldWarn, reason := checkProviderURL(agentCard.Provider.Url); shouldWarn {
-					reqLogger.Warn("provider.url contains internal URL: %s (%s) - not rewriting but this may be incorrect",
-						agentCard.Provider.Url, reason)
+			if providerMap, ok := agentCardMap["provider"].(map[string]interface{}); ok {
+				if providerURL, ok := providerMap["url"].(string); ok && providerURL != "" {
+					if shouldWarn, reason := checkProviderURL(providerURL); shouldWarn {
+						reqLogger.Warn("provider.url contains internal URL: %s (%s) - not rewriting but this may be incorrect",
+							providerURL, reason)
+					}
 				}
 			}
 
-			// Rewrite agent card URLs
-			agentCard = rewriteAgentCard(agentCard, gatewayURL, agentPath)
+			// Rewrite agent card URLs (preserves unknown fields)
+			agentCardMap = rewriteAgentCardMap(agentCardMap, gatewayURL, agentPath)
 
 			// Marshal rewritten agent card
-			rewrittenBody, err := json.Marshal(agentCard)
+			rewrittenBody, err := json.Marshal(agentCardMap)
 			if err != nil {
 				reqLogger.Error("failed to marshal rewritten agent card: %s", err)
 				http.Error(w, "failed to create rewritten agent card", http.StatusInternalServerError)
