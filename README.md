@@ -117,12 +117,13 @@ curl -X POST http://localhost:8080/__admin/mappings \
         "protocolVersion": "0.3.0",
         "capabilities": {},
         "supportsAuthenticatedExtendedCard": false,
-        "url": "http://mock-agent.default.svc.cluster.local:8080",
+        "url": "http://localhost:8080",
         "additionalInterfaces": [
-          {"transport": "http", "url": "http://mock-agent.default.svc.cluster.local:8080"},
-          {"transport": "https", "url": "https://mock-agent.default.svc.cluster.local:8443"},
+          {"transport": "http", "url": "http://mock-agent:8080"},
+          {"transport": "https", "url": "http://10.96.1.50:8443"},
           {"transport": "grpc", "url": "grpc://mock-agent.default.svc.cluster.local:9090"},
-          {"transport": "websocket", "url": "ws://mock-agent.default.svc.cluster.local:8080/ws"},
+          {"transport": "websocket", "url": "ws://host.docker.internal:8080/ws"},
+          {"transport": "http", "url": "http://api.internal:8000"},
           {"transport": "http", "url": "https://external-service.example.com/api"}
         ],
         "provider": {
@@ -160,20 +161,27 @@ Wait for the plugins to load (look for these logs):
 
 **Direct to mock agent** (no rewriting):
 ```bash
-curl http://localhost:8080/.well-known/agent-card.json | jq .url
-# "http://mock-agent.default.svc.cluster.local:8080"
+curl http://localhost:8080/.well-known/agent-card.json | jq
+# "http://localhost:8080"
 ```
 
 **Through KrakenD gateway** (with agentcard-rw plugin):
 ```bash
 curl -H "Host: gateway.agentic-layer.ai" \
-       http://localhost:10000/mock-agent/.well-known/agent-card.json | jq| jq .url
+       http://localhost:10000/mock-agent/.well-known/agent-card.json | jq
 # "https://gateway.agentic-layer.ai/mock-agent"
 ```
 
 #### What Gets Transformed
 
-- ✅ Internal cluster URLs (`*.svc.cluster.local`) → Gateway URLs
+- ✅ Internal URLs rewritten to gateway URLs:
+  - Kubernetes cluster URLs (`*.svc.cluster.local`)
+  - Kubernetes short-form names (`service-name`, `service-name.namespace`)
+  - Localhost and loopback (`localhost`, `127.0.0.1`, `::1`)
+  - Private IPs (RFC 1918: `10.x`, `172.16-31.x`, `192.168.x`)
+  - Docker internal hostnames (`*.docker.internal`)
+  - Special-use domains (`*.local`, `*.internal`, `*.localhost`)
+  - Link-local addresses (`169.254.x.x`, `fe80::`)
 - ✅ Transport filtering: Only HTTP/HTTPS kept, gRPC/WebSocket/SSE removed
 - ✅ External URLs preserved unchanged
 - ✅ Provider URLs never rewritten
@@ -186,12 +194,13 @@ curl -H "Host: gateway.agentic-layer.ai" \
 **Before** (direct to mock agent):
 ```json
 {
-  "url": "http://mock-agent.default.svc.cluster.local:8080",
+  "url": "http://localhost:8080",
   "additionalInterfaces": [
-    {"transport": "http", "url": "http://mock-agent.default.svc.cluster.local:8080"},
-    {"transport": "https", "url": "https://mock-agent.default.svc.cluster.local:8443"},
+    {"transport": "http", "url": "http://mock-agent:8080"},
+    {"transport": "https", "url": "http://10.96.1.50:8443"},
     {"transport": "grpc", "url": "grpc://mock-agent.default.svc.cluster.local:9090"},
-    {"transport": "websocket", "url": "ws://mock-agent.default.svc.cluster.local:8080/ws"},
+    {"transport": "websocket", "url": "ws://host.docker.internal:8080/ws"},
+    {"transport": "http", "url": "http://api.internal:8000"},
     {"transport": "http", "url": "https://external-service.example.com/api"}
   ]
 }
@@ -204,6 +213,7 @@ curl -H "Host: gateway.agentic-layer.ai" \
   "additionalInterfaces": [
     {"transport": "http", "url": "https://gateway.agentic-layer.ai/mock-agent"},
     {"transport": "https", "url": "https://gateway.agentic-layer.ai/mock-agent"},
+    {"transport": "http", "url": "https://gateway.agentic-layer.ai/mock-agent"},
     {"transport": "http", "url": "https://external-service.example.com/api"}
   ]
 }
