@@ -103,7 +103,7 @@ func TestCheckProviderURL(t *testing.T) {
 		{
 			name:        "localhost",
 			providerURL: "http://localhost",
-			shouldWarn:  false,
+			shouldWarn:  true, // Changed: localhost is now detected as internal
 		},
 		{
 			name:        "empty URL",
