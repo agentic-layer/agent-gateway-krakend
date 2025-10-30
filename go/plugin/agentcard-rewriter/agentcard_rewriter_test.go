@@ -178,13 +178,15 @@ func TestRequestPassThrough(t *testing.T) {
 // TestAgentCardInterception verifies agent card requests are intercepted
 func TestAgentCardInterception(t *testing.T) {
 	// Create a mock backend that returns an agent card with internal URLs
+	// Tests multiple internal URL patterns: localhost, K8s short-form, private IP
 	agentCard := models.AgentCard{
 		Name:        "Test Agent",
 		Description: "A test agent",
-		Url:         "http://test-agent.default.svc.cluster.local:8000/",
+		Url:         "http://localhost:8000/",
 		Version:     "1.0.0",
 		AdditionalInterfaces: []models.AgentInterface{
-			{Transport: "http", Url: "http://test-agent.default.svc.cluster.local:8000/"},
+			{Transport: "http", Url: "http://weather-agent:8080/"},
+			{Transport: "http", Url: "http://10.0.1.50:8000/"},
 			{Transport: "grpc", Url: "http://test-agent.default.svc.cluster.local:9000/"},
 		},
 		Provider: &models.AgentProvider{
@@ -235,16 +237,18 @@ func TestAgentCardInterception(t *testing.T) {
 		t.Errorf("card.Url = %q, want %q", responseCard.Url, expectedURL)
 	}
 
-	// Verify grpc interface was removed
-	if len(responseCard.AdditionalInterfaces) != 1 {
-		t.Errorf("len(AdditionalInterfaces) = %d, want 1", len(responseCard.AdditionalInterfaces))
+	// Verify grpc interface was removed (only http interfaces remain)
+	if len(responseCard.AdditionalInterfaces) != 2 {
+		t.Errorf("len(AdditionalInterfaces) = %d, want 2", len(responseCard.AdditionalInterfaces))
 	}
 
-	// Verify http interface was rewritten
-	if len(responseCard.AdditionalInterfaces) > 0 {
-		if responseCard.AdditionalInterfaces[0].Url != expectedURL {
-			t.Errorf("AdditionalInterfaces[0].Url = %q, want %q",
-				responseCard.AdditionalInterfaces[0].Url, expectedURL)
+	// Verify all http interfaces were rewritten to external gateway URL
+	for i, iface := range responseCard.AdditionalInterfaces {
+		if iface.Url != expectedURL {
+			t.Errorf("AdditionalInterfaces[%d].Url = %q, want %q", i, iface.Url, expectedURL)
+		}
+		if iface.Transport != "http" {
+			t.Errorf("AdditionalInterfaces[%d].Transport = %q, want http", i, iface.Transport)
 		}
 	}
 
@@ -440,6 +444,52 @@ func TestInternalRequestPassThrough(t *testing.T) {
 	}
 }
 
+// TestInternalRequestPassThroughLocalhost verifies localhost requests skip rewriting
+// Tests localhost request source with private IP agent URL
+func TestInternalRequestPassThroughLocalhost(t *testing.T) {
+	agentCard := models.AgentCard{
+		Name: "Test Agent",
+		Url:  "http://192.168.1.100:8000/",
+	}
+	cardJSON, _ := json.Marshal(agentCard)
+
+	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(cardJSON)
+	})
+
+	// Create the plugin handler with no config (should fail without valid Host header)
+	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
+	if err != nil {
+		t.Fatalf("failed to register handler: %v", err)
+	}
+
+	// Create test request with localhost as host (internal source)
+	req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
+	req.Host = "localhost:10000"
+	req.Header.Set("X-Forwarded-Proto", "http")
+
+	// Record response
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	// Verify response passed through unchanged (no rewriting for localhost requests)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var responseCard models.AgentCard
+	if err := json.Unmarshal(rec.Body.Bytes(), &responseCard); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	// URL should remain internal (not rewritten) since request came from localhost
+	if responseCard.Url != agentCard.Url {
+		t.Errorf("card.Url = %q, want unchanged %q", responseCard.Url, agentCard.Url)
+	}
+}
+
 // TestExternalURLPreserved verifies external URLs in agent cards are not rewritten
 func TestExternalURLPreserved(t *testing.T) {
 	externalURL := "https://external-agent.example.com/api"
@@ -579,14 +629,31 @@ func TestConfigFallbackIntegration(t *testing.T) {
 			expectedURL:   "https://header-gateway.example.com/test-agent",
 			shouldRewrite: true,
 		},
+		{
+			name: "docker internal hostname with config fallback",
+			configJSON: `{
+				"agentcard_rw_config": {
+					"gateway_url": "https://configured-gateway.example.com"
+				}
+			}`,
+			requestHost:   "host.docker.internal",
+			expectedURL:   "https://configured-gateway.example.com/test-agent",
+			shouldRewrite: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a mock backend that returns an agent card with internal URLs
+			// Use different internal URL patterns for different test cases
+			agentURL := "http://test-agent.default.svc.cluster.local:8000/"
+			if tt.name == "docker internal hostname with config fallback" {
+				agentURL = "http://api-service.internal:8000/"
+			}
+
 			agentCard := models.AgentCard{
 				Name:    "Test Agent",
-				Url:     "http://test-agent.default.svc.cluster.local:8000/",
+				Url:     agentURL,
 				Version: "1.0.0",
 			}
 			cardJSON, _ := json.Marshal(agentCard)

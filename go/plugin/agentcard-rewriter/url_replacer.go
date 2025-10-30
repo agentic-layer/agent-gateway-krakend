@@ -23,7 +23,7 @@ func checkProviderURL(providerURL string) (bool, string) {
 	}
 
 	if isInternalURL(providerURL) {
-		return true, "contains .svc.cluster.local"
+		return true, "contains internal/local URL"
 	}
 
 	return false, ""
