@@ -72,6 +72,11 @@ func rewriteAdditionalInterfaces(interfaces []models.AgentInterface, gatewayURL 
 		if iface.Transport == "http" || iface.Transport == "https" {
 			// Rewrite internal URLs
 			if isInternalURL(iface.Url) {
+				// TODO: Technical decision needed: Should we normalize transport field to match
+				// external URL scheme (https), or deduplicate interfaces when they all point to
+				// the same URL? Currently all internal URLs are rewritten to the same external
+				// gateway URL regardless of original transport (http/https/other), which may be
+				// misleading as transport field doesn't match the URL scheme.
 				iface.Url = externalURL
 			}
 			result = append(result, iface)
@@ -127,6 +132,11 @@ func rewriteAdditionalInterfacesMap(interfaces []interface{}, gatewayURL string,
 			if url, ok := safeGetString(ifaceMap, "url"); ok {
 				// Rewrite internal URLs
 				if isInternalURL(url) {
+					// TODO: Technical decision needed: Should we normalize transport field to match
+					// external URL scheme (https), or deduplicate interfaces when they all point to
+					// the same URL? Currently all internal URLs are rewritten to the same external
+					// gateway URL regardless of original transport (http/https/other), which may be
+					// misleading as transport field doesn't match the URL scheme.
 					ifaceMap["url"] = externalURL
 				}
 			}
