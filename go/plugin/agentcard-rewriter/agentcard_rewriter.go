@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -13,12 +12,7 @@ import (
 
 const (
 	pluginName = "agentcard-rw"
-	configKey  = "agentcard_rw_config"
 )
-
-type config struct {
-	GatewayURL string `json:"gateway_url"` // Full gateway URL with scheme and port, e.g., "https://gateway.agentic-layer.ai" or "http://localhost:10000"
-}
 
 type registerer string
 
@@ -64,44 +58,12 @@ func (rw *responseWriter) WriteHeader(statusCode int) {
 	rw.statusCode = statusCode
 }
 
-// parseConfig parses plugin configuration from KrakenD extra_config
-func parseConfig(extra map[string]interface{}, cfg *config) error {
-	// If no config provided, return empty config (use header auto-detection only)
-	if extra[configKey] == nil {
-		logger.Info("no configuration provided, using header auto-detection only")
-		return nil
-	}
-
-	pluginConfig, ok := extra[configKey].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("cannot read extra_config.%s", configKey)
-	}
-
-	raw, err := json.Marshal(pluginConfig)
-	if err != nil {
-		return fmt.Errorf("cannot marshal extra config back to JSON: %s", err.Error())
-	}
-
-	err = json.Unmarshal(raw, cfg)
-	if err != nil {
-		return fmt.Errorf("cannot parse extra config: %s", err.Error())
-	}
-
-	logger.Info("configuration loaded: gateway_url=%s", cfg.GatewayURL)
-	return nil
-}
-
 func (r registerer) registerHandlers(_ context.Context, extra map[string]interface{}, handler http.Handler) (http.Handler, error) {
-	var cfg config
-	err := parseConfig(extra, &cfg)
-	if err != nil {
-		return nil, err
-	}
-	logger.Info("configuration loaded successfully")
-	return http.HandlerFunc(r.handleRequest(cfg, handler)), nil
+	logger.Info("plugin initialized successfully")
+	return http.HandlerFunc(r.handleRequest(handler)), nil
 }
 
-func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.ResponseWriter, req *http.Request) {
+func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {
 		reqLogger := logging.NewWithPluginName(pluginName)
 
@@ -109,11 +71,12 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 		if req.Method == http.MethodGet && isAgentCardEndpoint(req.URL.Path) {
 			reqLogger.Info("intercepted agent card request: %s", req.URL.Path)
 
-			// Get gateway URL from request headers (with config fallback)
-			gatewayURL, err := getGatewayURL(req, cfg)
+			// Get gateway URL from request headers
+			gatewayURL, err := getGatewayURL(req)
 			if err != nil {
-				reqLogger.Warn("cannot determine gateway URL: %s - passing through", err)
-				handler.ServeHTTP(w, req)
+				reqLogger.Error("cannot determine gateway URL: %s", err)
+				// Todo: NOTE Passing through was removed, please confirm ok
+				http.Error(w, "Host header is required for agent card URL rewriting", http.StatusInternalServerError)
 				return
 			}
 
@@ -153,16 +116,6 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 				return
 			}
 
-			// Check provider URL for suspicious internal URLs
-			if providerMap, ok := agentCardMap["provider"].(map[string]interface{}); ok {
-				if providerURL, ok := providerMap["url"].(string); ok && providerURL != "" {
-					if shouldWarn, reason := checkProviderURL(providerURL); shouldWarn {
-						reqLogger.Warn("provider.url contains internal URL: %s (%s) - not rewriting but this may be incorrect",
-							providerURL, reason)
-					}
-				}
-			}
-
 			// Rewrite agent card URLs (preserves unknown fields)
 			agentCardMap = rewriteAgentCardMap(agentCardMap, gatewayURL, agentPath)
 
@@ -176,15 +129,7 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 
 			reqLogger.Info("transformed agent card URLs to external gateway format")
 
-			// Todo remove before merge
-			// Log the rewritten body for debugging
-			bodyPreview := string(rewrittenBody)
-			if len(bodyPreview) > 200 {
-				bodyPreview = bodyPreview[:200] + "..."
-			}
-			reqLogger.Info("rewritten body size: %d bytes, preview: %s", len(rewrittenBody), bodyPreview)
-
-			// Write the transformed response (following openai-a2a plugin pattern)
+			// Write the transformed response
 			w.Header().Set("Content-Type", "application/json")
 			// Remove Content-Length to allow for recalculation
 			w.Header().Del("Content-Length")

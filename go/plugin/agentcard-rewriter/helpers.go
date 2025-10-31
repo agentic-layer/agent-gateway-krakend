@@ -30,41 +30,22 @@ func extractAgentPath(path string) string {
 	return ""
 }
 
-// getGatewayURL extracts the gateway URL from request headers with config fallback
-// Returns the full URL scheme + host, or an error if it cannot be determined
-func getGatewayURL(req *http.Request, cfg config) (string, error) {
+// getGatewayURL extracts the gateway URL from request headers
+// Returns the full URL scheme + host, or an error if Host header is missing
+func getGatewayURL(req *http.Request) (string, error) {
 	host := req.Host
 
-	// Try header detection first - check if host is external (not internal)
-	// Extract hostname without port for internal check
-	if host != "" {
-		// Try to parse to extract hostname (handles both hostname and hostname:port)
-		hostname := host
-		if h, _, err := net.SplitHostPort(host); err == nil {
-			hostname = h
-		}
-
-		// If hostname is not internal, use it as gateway URL
-		if !isInternalHostname(hostname) {
-			// Default to https, but check X-Forwarded-Proto header
-			scheme := "https"
-			if proto := req.Header.Get("X-Forwarded-Proto"); proto != "" {
-				scheme = proto
-			}
-			return fmt.Sprintf("%s://%s", scheme, host), nil
-		}
-	}
-
-	// Fallback to configured gateway URL
-	if cfg.GatewayURL != "" {
-		return cfg.GatewayURL, nil
-	}
-
-	// Both methods failed
 	if host == "" {
-		return "", fmt.Errorf("Host header not present and no gateway_url configured")
+		return "", fmt.Errorf("Host header is required for agent card URL rewriting")
 	}
-	return "", fmt.Errorf("internal request source and no gateway_url configured")
+
+	// Default to https, but check X-Forwarded-Proto header
+	scheme := "https"
+	if proto := req.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	}
+
+	return fmt.Sprintf("%s://%s", scheme, host), nil
 }
 
 // isPrivateIP checks if an IP address is in a private/internal range
