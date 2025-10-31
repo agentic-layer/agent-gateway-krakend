@@ -2,8 +2,6 @@ package main
 
 import (
 	"strings"
-
-	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
 )
 
 // constructExternalURL builds the external gateway URL from gateway URL and agent path
@@ -33,51 +31,6 @@ func safeGetArray(m map[string]interface{}, key string) ([]interface{}, bool) {
 		}
 	}
 	return nil, false
-}
-
-// safeGetMap safely extracts a map value from a map
-func safeGetMap(m map[string]interface{}, key string) (map[string]interface{}, bool) {
-	if val, ok := m[key]; ok {
-		if subMap, ok := val.(map[string]interface{}); ok {
-			return subMap, true
-		}
-	}
-	return nil, false
-}
-
-// rewriteAdditionalInterfaces filters and rewrites additional interfaces
-// - Keeps only HTTP/HTTPS transports
-// - Rewrites all URLs to external gateway URLs
-// - Removes unsupported transports (gRPC, WebSocket, SSE, etc.)
-func rewriteAdditionalInterfaces(interfaces []models.AgentInterface, gatewayURL string, agentPath string) []models.AgentInterface {
-	var result []models.AgentInterface
-	externalURL := constructExternalURL(gatewayURL, agentPath)
-
-	for _, iface := range interfaces {
-		// Only keep http and https transports
-		if iface.Transport == "http" || iface.Transport == "https" {
-			iface.Url = externalURL
-			result = append(result, iface)
-		}
-		// All other transports are implicitly removed
-	}
-
-	return result
-}
-
-// rewriteAgentCard transforms all URLs to external gateway URLs in an agent card
-func rewriteAgentCard(card models.AgentCard, gatewayURL string, agentPath string) models.AgentCard {
-	externalURL := constructExternalURL(gatewayURL, agentPath)
-
-	// Rewrite main URL
-	card.Url = externalURL
-
-	// Rewrite and filter additional interfaces
-	card.AdditionalInterfaces = rewriteAdditionalInterfaces(card.AdditionalInterfaces, gatewayURL, agentPath)
-
-	// Provider URL is never rewritten (it's organizational metadata, not an agent endpoint)
-
-	return card
 }
 
 // rewriteAdditionalInterfacesMap filters and rewrites additional interfaces using map representation
