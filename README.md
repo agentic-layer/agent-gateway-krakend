@@ -56,12 +56,28 @@ Run the container locally:
 docker run -p 8080:8080 -v $(pwd)/local/krakend.json:/etc/krakend/krakend.json:ro agentic-layer/agent-gateway-krakend
 ```
 
-### Testing the Gateway
+## Testing
 
-Test the proxy functionality:
+### Setup
+
+Start all services using Docker Compose:
 
 ```bash
-curl http://localhost:8080/weather-agent \
+docker-compose up
+
+# Wait for plugins to load (look for these logs):
+# [AGENTCARD-RW  ] loaded
+# [OPENAI-A2A    ] loaded
+```
+
+The repository includes a pre-configured mock agent that loads test data from `test/mappings/agent-card.json`. You can customize the mock agent behavior by editing this file. See the [mock-agent configuration docs](https://github.com/agentic-layer/agent-samples/tree/main/wiremock/mock-agent#configuration) for details.
+
+### Test 1: Basic Gateway Connectivity
+
+Verify the gateway proxy functionality with a JSON-RPC message:
+
+```bash
+curl http://localhost:8080/mock-agent \
   -H "Content-Type: application/json" \
   -d '{
      "jsonrpc": "2.0",
@@ -73,7 +89,7 @@ curl http://localhost:8080/weather-agent \
          "parts": [
            {
              "kind": "text",
-             "text": "What is the weather in New York?"
+             "text": "Hello, mock agent!"
            }
          ],
          "messageId": "9229e770-767c-417b-a0b0-f0741243c589",
@@ -84,79 +100,40 @@ curl http://localhost:8080/weather-agent \
    }' | jq
 ```
 
-### Testing Agent Card URL Rewriting
+### Test 2: Agent Card URL Rewriting
 
-The `agentcard-rw` plugin rewrites Agent Card URLs to external gateway URLs and filters transport types. The plugin uses the `Host` header from incoming requests to construct the external gateway URL.
-
-#### Quick Start with Docker Compose
-
-The repository includes a pre-configured mock agent with test mappings:
-
-```bash
-# Start all services (gateway + mock agent + weather agent)
-docker-compose up
-
-# Wait for plugins to load (look for these logs):
-# [AGENTCARD-RW  ] loaded
-# [OPENAI-A2A    ] loaded
-```
-
-The mock agent automatically loads test data from `test/mappings/agent-card.json`, which includes various internal cluster URLs and transport types to demonstrate the rewriting functionality.
-
-**Note:** You can customize the mock agent behavior by editing `test/mappings/agent-card.json`. See the [mock-agent configuration docs](https://github.com/agentic-layer/agent-samples/tree/main/wiremock/mock-agent#configuration) for details.
-
-#### Test Comparison
+The `agentcard-rw` plugin rewrites Agent Card URLs to external gateway URLs and filters transport types based on the `Host` header.
 
 **Direct to mock agent** (no rewriting):
 ```bash
 curl http://localhost:8080/.well-known/agent-card.json | jq
-# "http://localhost:8080"
+# Returns: "url": "http://localhost:8080"
 ```
 
 **Through KrakenD gateway** (with agentcard-rw plugin):
 ```bash
 curl -H "Host: gateway.agentic-layer.ai" \
-       http://localhost:10000/mock-agent/.well-known/agent-card.json | jq
-# "https://gateway.agentic-layer.ai/mock-agent"
+     http://localhost:10000/mock-agent/.well-known/agent-card.json | jq
+# Returns: "url": "https://gateway.agentic-layer.ai/mock-agent"
 ```
 
-#### What Gets Transformed
+**What gets transformed:**
+- ✅ **All agent URLs rewritten**: Both `url` and `additionalInterfaces` are rewritten to gateway URLs
+- ✅ **Transport filtering**: Only valid transports kept (JSONRPC, GRPC, HTTP+JSON). Invalid transports removed.
+- ✅ **Provider URLs unchanged**: Provider metadata remains as-is
 
-- ✅ **All URLs rewritten**: Agent endpoint URLs (`url` and `additionalInterfaces`) are always rewritten to gateway URLs
-- ✅ **Transport filtering**: Only valid transports kept (JSONRPC, GRPC, HTTP+JSON - case-insensitive). Invalid transports removed (http, https, websocket, sse, etc.)
-- ✅ **Provider URLs never rewritten**: Provider metadata remains unchanged
-
-#### Full Response Example
-
-<details>
-<summary>Click to expand</summary>
-
-**Before** (direct to mock agent):
+**Example transformation:**
 ```json
-{
-  "url": "http://localhost:8080",
-  "additionalInterfaces": [
-    {"transport": "JSONRPC", "url": "http://mock-agent:8080"},
-    {"transport": "HTTP+JSON", "url": "http://10.96.1.50:8443"},
-    {"transport": "grpc", "url": "grpc://mock-agent.default.svc.cluster.local:9090"}
-  ]
-}
+// Before (internal cluster URLs)
+{"transport": "JSONRPC", "url": "http://mock-agent:8080"}
+{"transport": "HTTP+JSON", "url": "http://10.96.1.50:8443"}
+
+// After (gateway URLs)
+{"transport": "JSONRPC", "url": "https://gateway.agentic-layer.ai/mock-agent"}
+{"transport": "HTTP+JSON", "url": "https://gateway.agentic-layer.ai/mock-agent"}
 ```
 
-**After** (through gateway):
-```json
-{
-  "url": "https://gateway.agentic-layer.ai/mock-agent",
-  "additionalInterfaces": [
-    {"transport": "JSONRPC", "url": "https://gateway.agentic-layer.ai/mock-agent"},
-    {"transport": "HTTP+JSON", "url": "https://gateway.agentic-layer.ai/mock-agent"},
-    {"transport": "grpc", "url": "https://gateway.agentic-layer.ai/mock-agent"}
-  ]
-}
-```
-</details>
-
-> **Note**: The plugin requires the `Host` header to be set in the request. In production, the ingress/load balancer automatically sets this header (e.g., `gateway.agentic-layer.ai`). For local testing, use the `-H "Host: ..."` flag with curl.
+> **Note**: The `Host` header is required for URL rewriting. In production, the ingress/load balancer sets this automatically. For local testing, use `-H "Host: gateway.agentic-layer.ai"` with curl.
 
 ## Contribution
 
