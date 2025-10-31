@@ -26,6 +26,17 @@ services:
     networks:
       - agent-network
 
+  mock-agent:
+    image: ghcr.io/agentic-layer/mock-agent:latest
+    container_name: mock-agent
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./test/mappings:/home/wiremock/mappings:ro
+    restart: unless-stopped
+    networks:
+      - agent-network
+
 networks:
   agent-network:
     driver: bridge

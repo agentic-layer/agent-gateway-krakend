@@ -86,66 +86,24 @@ curl http://localhost:8080/weather-agent \
 
 ### Testing Agent Card URL Rewriting
 
-The `agentcard-rw` plugin rewrites Agent Card URLs to external gateway URLs and filters out unsupported transports. The plugin uses the `Host` header from incoming requests to construct the external gateway URL.
+The `agentcard-rw` plugin rewrites Agent Card URLs to external gateway URLs and filters transport types. The plugin uses the `Host` header from incoming requests to construct the external gateway URL.
 
-#### Prerequisites
+#### Quick Start with Docker Compose
 
-Start the mock agent from `agent-samples`:
-
-```bash
-make docker-run  # Starts on port 8080
-```
-
-Configure the mock agent with test data (internal cluster URLs):
+The repository includes a pre-configured mock agent with test mappings:
 
 ```bash
-curl -X POST http://localhost:8080/__admin/mappings \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "request": {
-      "method": "GET",
-      "urlPath": "/.well-known/agent-card.json"
-    },
-    "response": {
-      "status": 200,
-      "headers": {"Content-Type": "application/json"},
-      "jsonBody": {
-        "name": "mock_agent",
-        "description": "Mock Agent that echoes back the input text 1:1",
-        "preferredTransport": "JSONRPC",
-        "protocolVersion": "0.3.0",
-        "capabilities": {},
-        "supportsAuthenticatedExtendedCard": false,
-        "url": "http://localhost:8080",
-        "additionalInterfaces": [
-          {"transport": "http", "url": "http://mock-agent:8080"},
-          {"transport": "https", "url": "http://10.96.1.50:8443"},
-          {"transport": "grpc", "url": "grpc://mock-agent.default.svc.cluster.local:9090"},
-          {"transport": "websocket", "url": "ws://host.docker.internal:8080/ws"},
-          {"transport": "http", "url": "http://api.internal:8000"},
-          {"transport": "http", "url": "https://external-service.example.com/api"}
-        ],
-        "provider": {
-          "name": "Test Provider",
-          "url": "https://test-provider.example.com"
-        },
-        "version": "0.0.1"
-      }
-    }
-  }'
+# Start all services (gateway + mock agent + weather agent)
+docker-compose up
+
+# Wait for plugins to load (look for these logs):
+# [AGENTCARD-RW  ] loaded
+# [OPENAI-A2A    ] loaded
 ```
 
-Start the KrakenD gateway:
+The mock agent automatically loads test data from `test/mappings/agent-card.json`, which includes various internal cluster URLs and transport types to demonstrate the rewriting functionality.
 
-```bash
-docker-compose
-```
-
-Wait for the plugins to load (look for these logs):
-```
-[AGENTCARD-RW  ] loaded
-[OPENAI-A2A    ] loaded
-```
+**Note:** You can customize the mock agent behavior by editing `test/mappings/agent-card.json`. See the [mock-agent configuration docs](https://github.com/agentic-layer/agent-samples/tree/main/wiremock/mock-agent#configuration) for details.
 
 #### Test Comparison
 
@@ -165,7 +123,7 @@ curl -H "Host: gateway.agentic-layer.ai" \
 #### What Gets Transformed
 
 - ✅ **All URLs rewritten**: Agent endpoint URLs (`url` and `additionalInterfaces`) are always rewritten to gateway URLs
-- ✅ **Transport filtering**: Only HTTP/HTTPS kept, gRPC/WebSocket/SSE removed
+- ✅ **Transport filtering**: Only valid transports kept (JSONRPC, GRPC, HTTP+JSON - case-insensitive). Invalid transports removed (http, https, websocket, sse, etc.)
 - ✅ **Provider URLs never rewritten**: Provider metadata remains unchanged
 
 #### Full Response Example
@@ -178,12 +136,9 @@ curl -H "Host: gateway.agentic-layer.ai" \
 {
   "url": "http://localhost:8080",
   "additionalInterfaces": [
-    {"transport": "http", "url": "http://mock-agent:8080"},
-    {"transport": "https", "url": "http://10.96.1.50:8443"},
-    {"transport": "grpc", "url": "grpc://mock-agent.default.svc.cluster.local:9090"},
-    {"transport": "websocket", "url": "ws://host.docker.internal:8080/ws"},
-    {"transport": "http", "url": "http://api.internal:8000"},
-    {"transport": "http", "url": "https://external-service.example.com/api"}
+    {"transport": "JSONRPC", "url": "http://mock-agent:8080"},
+    {"transport": "HTTP+JSON", "url": "http://10.96.1.50:8443"},
+    {"transport": "grpc", "url": "grpc://mock-agent.default.svc.cluster.local:9090"}
   ]
 }
 ```
@@ -193,10 +148,9 @@ curl -H "Host: gateway.agentic-layer.ai" \
 {
   "url": "https://gateway.agentic-layer.ai/mock-agent",
   "additionalInterfaces": [
-    {"transport": "http", "url": "https://gateway.agentic-layer.ai/mock-agent"},
-    {"transport": "https", "url": "https://gateway.agentic-layer.ai/mock-agent"},
-    {"transport": "http", "url": "https://gateway.agentic-layer.ai/mock-agent"},
-    {"transport": "http", "url": "https://external-service.example.com/api"}
+    {"transport": "JSONRPC", "url": "https://gateway.agentic-layer.ai/mock-agent"},
+    {"transport": "HTTP+JSON", "url": "https://gateway.agentic-layer.ai/mock-agent"},
+    {"transport": "grpc", "url": "https://gateway.agentic-layer.ai/mock-agent"}
   ]
 }
 ```
