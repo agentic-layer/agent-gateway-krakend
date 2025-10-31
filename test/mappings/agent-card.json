@@ -19,7 +19,7 @@
       "additionalInterfaces": [
         {"transport": "JSONRPC", "url": "http://mock-agent:8080"},
         {"transport": "HTTP+JSON", "url": "http://10.96.1.50:8443"},
-        {"transport": "grpc", "url": "grpc://mock-agent.default.svc.cluster.local:9090"}
+        {"transport": "grpc", "url": "http://mock-agent.default.svc.cluster.local:9090"}
       ],
       "provider": {
         "name": "Test Provider",
