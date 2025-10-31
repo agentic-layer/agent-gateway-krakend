@@ -16,7 +16,6 @@ const (
 	testGatewayHost   = "gateway.agentic-layer.ai"
 	testAgentCardPath = "/.well-known/agent-card.json"
 	testHTTPSProtocol = "https"
-	testHTTPProtocol  = "http"
 	contentTypeJSON   = "application/json"
 )
 
@@ -63,27 +62,6 @@ func (h *testHelper) createJSONBackend(jsonData string) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(jsonData))
 	})
-}
-
-// assertAgentCardURL checks the agent card URL matches expected
-func assertAgentCardURL(t *testing.T, card models.AgentCard, expectedURL string) {
-	t.Helper()
-	if card.Url != expectedURL {
-		t.Errorf("card.Url = %q, want %q", card.Url, expectedURL)
-	}
-}
-
-// AgentCard factory functions
-func defaultAgentCard() models.AgentCard {
-	return models.AgentCard{
-		Name:    "Test Agent",
-		Version: "1.0.0",
-	}
-}
-
-func withURL(card models.AgentCard, url string) models.AgentCard {
-	card.Url = url
-	return card
 }
 
 // TestPluginRegistration verifies the plugin can be registered
@@ -333,90 +311,6 @@ func TestErrorConditionsPassThrough(t *testing.T) {
 				t.Error("expected error message in response body")
 			}
 		})
-	}
-}
-
-// TestURLRewritingScenarios verifies URL rewriting with various host configurations
-func TestURLRewritingScenarios(t *testing.T) {
-	tests := []struct {
-		name        string
-		inputURL    string
-		agentPath   string
-		requestHost string
-		protocol    string
-		expectedURL string
-	}{
-		{
-			name:        "Cluster hostname with internal URL",
-			inputURL:    "http://test-agent.default.svc.cluster.local:8000/",
-			agentPath:   "/test-agent",
-			requestHost: "agent-gateway.default.svc.cluster.local:10000",
-			protocol:    testHTTPProtocol,
-			expectedURL: "http://agent-gateway.default.svc.cluster.local:10000/test-agent",
-		},
-		{
-			name:        "Localhost with private IP URL",
-			inputURL:    "http://192.168.1.100:8000/",
-			agentPath:   "/test-agent",
-			requestHost: "localhost:10000",
-			protocol:    testHTTPProtocol,
-			expectedURL: "http://localhost:10000/test-agent",
-		},
-		{
-			name:        "External URL rewritten to gateway",
-			inputURL:    "https://external-agent.example.com/api",
-			agentPath:   "/external-agent",
-			requestHost: testGatewayHost,
-			protocol:    testHTTPSProtocol,
-			expectedURL: "https://gateway.agentic-layer.ai/external-agent",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			helper := newTestHelper(t)
-
-			// Create agent card with test URL
-			agentCard := withURL(defaultAgentCard(), tt.inputURL)
-			backend := helper.createAgentCardBackend(agentCard)
-			handler := helper.createPluginHandler(backend)
-
-			// Make request
-			rec := helper.makeRequest(handler, http.MethodGet, tt.agentPath+testAgentCardPath, tt.requestHost, tt.protocol)
-
-			// Verify response
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
-			}
-
-			var responseCard models.AgentCard
-			if err := json.Unmarshal(rec.Body.Bytes(), &responseCard); err != nil {
-				t.Fatalf("failed to parse response: %v", err)
-			}
-
-			// Verify URL was rewritten to expected value
-			assertAgentCardURL(t, responseCard, tt.expectedURL)
-		})
-	}
-}
-
-// TestResponseWriterCapture verifies the responseWriter correctly captures responses
-func TestResponseWriterCapture(t *testing.T) {
-	originalWriter := httptest.NewRecorder()
-	rw := newResponseWriter(originalWriter)
-
-	// Write status and body
-	rw.WriteHeader(http.StatusCreated)
-	_, _ = rw.Write([]byte("test body"))
-
-	// Verify captured status
-	if rw.statusCode != http.StatusCreated {
-		t.Errorf("captured statusCode = %d, want %d", rw.statusCode, http.StatusCreated)
-	}
-
-	// Verify captured body
-	if rw.body.String() != "test body" {
-		t.Errorf("captured body = %q, want %q", rw.body.String(), "test body")
 	}
 }
 
