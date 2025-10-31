@@ -45,10 +45,3 @@ func getGatewayURL(req *http.Request) (string, error) {
 
 	return fmt.Sprintf("%s://%s", scheme, host), nil
 }
-
-// copyHeaders copies all headers from source to destination
-func copyHeaders(dst, src http.Header) {
-	for k, v := range src {
-		dst[k] = v
-	}
-}
