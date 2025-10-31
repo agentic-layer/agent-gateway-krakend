@@ -8,7 +8,7 @@ services:
     image: agentic-layer/agent-gateway-krakend:latest
     container_name: agent-gateway-krakend
     ports:
-      - "8080:8080"
+      - "10000:10000"
     volumes:
       - ./local/krakend.json:/etc/krakend/krakend.json:ro
     restart: unless-stopped
@@ -22,6 +22,17 @@ services:
       - "8000:8000"
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  mock-agent:
+    image: ghcr.io/agentic-layer/mock-agent:latest
+    container_name: mock-agent
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./test/mappings:/home/wiremock/mappings:ro
     restart: unless-stopped
     networks:
       - agent-network
