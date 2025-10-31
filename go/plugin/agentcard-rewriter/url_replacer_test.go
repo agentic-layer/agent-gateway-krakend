@@ -74,58 +74,6 @@ func TestConstructExternalURL(t *testing.T) {
 	}
 }
 
-func TestCheckProviderURL(t *testing.T) {
-	tests := []struct {
-		name        string
-		providerURL string
-		shouldWarn  bool
-	}{
-		{
-			name:        "internal cluster URL",
-			providerURL: "http://company.svc.cluster.local",
-			shouldWarn:  true,
-		},
-		{
-			name:        "internal cluster URL with port",
-			providerURL: "http://service.namespace.svc.cluster.local:8080",
-			shouldWarn:  true,
-		},
-		{
-			name:        "external URL",
-			providerURL: "https://qaware.de",
-			shouldWarn:  false,
-		},
-		{
-			name:        "external company URL",
-			providerURL: "https://example.com",
-			shouldWarn:  false,
-		},
-		{
-			name:        "localhost",
-			providerURL: "http://localhost",
-			shouldWarn:  true, // Changed: localhost is now detected as internal
-		},
-		{
-			name:        "empty URL",
-			providerURL: "",
-			shouldWarn:  false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			shouldWarn, reason := checkProviderURL(tt.providerURL)
-			if shouldWarn != tt.shouldWarn {
-				t.Errorf("checkProviderURL(%q) shouldWarn = %v, want %v (reason: %s)",
-					tt.providerURL, shouldWarn, tt.shouldWarn, reason)
-			}
-			if shouldWarn && reason == "" {
-				t.Errorf("checkProviderURL(%q) shouldWarn=true but reason is empty", tt.providerURL)
-			}
-		})
-	}
-}
-
 func TestRewriteAdditionalInterfaces(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -149,7 +97,7 @@ func TestRewriteAdditionalInterfaces(t *testing.T) {
 			},
 		},
 		{
-			name: "keep external http, rewrite internal http",
+			name: "rewrite all URLs",
 			interfaces: []models.AgentInterface{
 				{Transport: "http", Url: "https://external.example.com/agent"},
 				{Transport: "http", Url: "http://agent.svc.cluster.local:8000/"},
@@ -157,7 +105,7 @@ func TestRewriteAdditionalInterfaces(t *testing.T) {
 			gatewayURL: "https://gateway.ai",
 			agentPath:  "/test-agent",
 			expected: []models.AgentInterface{
-				{Transport: "http", Url: "https://external.example.com/agent"},
+				{Transport: "http", Url: "https://gateway.ai/test-agent"},
 				{Transport: "http", Url: "https://gateway.ai/test-agent"},
 			},
 		},
@@ -246,7 +194,7 @@ func TestRewriteAgentCard(t *testing.T) {
 			},
 		},
 		{
-			name: "keep external main URL unchanged",
+			name: "rewrite external main URL",
 			card: models.AgentCard{
 				Url:     "https://external.example.com/agent",
 				Version: "1.0.0",
@@ -254,8 +202,8 @@ func TestRewriteAgentCard(t *testing.T) {
 			gatewayURL: "https://gateway.ai",
 			agentPath:  "/test-agent",
 			checkFunc: func(t *testing.T, result models.AgentCard) {
-				if result.Url != "https://external.example.com/agent" {
-					t.Errorf("card.Url = %q, want unchanged", result.Url)
+				if result.Url != "https://gateway.ai/test-agent" {
+					t.Errorf("card.Url = %q, want %q", result.Url, "https://gateway.ai/test-agent")
 				}
 			},
 		},
@@ -397,7 +345,7 @@ func TestRewriteAdditionalInterfacesMap(t *testing.T) {
 			},
 		},
 		{
-			name: "keep external http, rewrite internal http",
+			name: "rewrite all URLs",
 			interfaces: []interface{}{
 				map[string]interface{}{"transport": "http", "url": "https://external.example.com/agent"},
 				map[string]interface{}{"transport": "http", "url": "http://agent.svc.cluster.local:8000/"},
@@ -405,7 +353,7 @@ func TestRewriteAdditionalInterfacesMap(t *testing.T) {
 			gatewayURL: "https://gateway.ai",
 			agentPath:  "/test-agent",
 			expected: []interface{}{
-				map[string]interface{}{"transport": "http", "url": "https://external.example.com/agent"},
+				map[string]interface{}{"transport": "http", "url": "https://gateway.ai/test-agent"},
 				map[string]interface{}{"transport": "http", "url": "https://gateway.ai/test-agent"},
 			},
 		},
@@ -509,7 +457,7 @@ func TestRewriteAgentCardMap(t *testing.T) {
 			},
 		},
 		{
-			name: "keep external main URL unchanged",
+			name: "rewrite external main URL",
 			cardMap: map[string]interface{}{
 				"url":     "https://external.example.com/agent",
 				"version": "1.0.0",
@@ -517,8 +465,8 @@ func TestRewriteAgentCardMap(t *testing.T) {
 			gatewayURL: "https://gateway.ai",
 			agentPath:  "/test-agent",
 			checkFunc: func(t *testing.T, result map[string]interface{}) {
-				if result["url"] != "https://external.example.com/agent" {
-					t.Errorf("url = %v, want unchanged", result["url"])
+				if result["url"] != "https://gateway.ai/test-agent" {
+					t.Errorf("url = %v, want %q", result["url"], "https://gateway.ai/test-agent")
 				}
 			},
 		},

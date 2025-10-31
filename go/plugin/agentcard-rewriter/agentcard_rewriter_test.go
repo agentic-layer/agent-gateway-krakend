@@ -405,8 +405,8 @@ func TestLocalhostHostRewriting(t *testing.T) {
 	}
 }
 
-// TestExternalURLPreserved verifies external URLs in agent cards are not rewritten
-func TestExternalURLPreserved(t *testing.T) {
+// TestExternalURLRewritten verifies external URLs in agent cards are rewritten
+func TestExternalURLRewritten(t *testing.T) {
 	externalURL := "https://external-agent.example.com/api"
 	agentCard := models.AgentCard{
 		Name: "External Agent",
@@ -445,9 +445,10 @@ func TestExternalURLPreserved(t *testing.T) {
 		t.Fatalf("failed to parse response: %v", err)
 	}
 
-	// External URL should be preserved
-	if responseCard.Url != externalURL {
-		t.Errorf("card.Url = %q, want preserved %q", responseCard.Url, externalURL)
+	// External URL should be rewritten to gateway URL
+	expectedURL := "https://gateway.agentic-layer.ai/external-agent"
+	if responseCard.Url != expectedURL {
+		t.Errorf("card.Url = %q, want %q", responseCard.Url, expectedURL)
 	}
 }
 
