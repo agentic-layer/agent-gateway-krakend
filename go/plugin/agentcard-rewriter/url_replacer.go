@@ -15,20 +15,6 @@ func constructExternalURL(gatewayURL string, agentPath string) string {
 	return gatewayURL + agentPath
 }
 
-// checkProviderURL checks if the provider URL is suspiciously internal
-// Returns (shouldWarn, reason)
-func checkProviderURL(providerURL string) (bool, string) {
-	if providerURL == "" {
-		return false, ""
-	}
-
-	if isInternalURL(providerURL) {
-		return true, "contains internal/local URL"
-	}
-
-	return false, ""
-}
-
 // safeGetString safely extracts a string value from a map
 func safeGetString(m map[string]interface{}, key string) (string, bool) {
 	if val, ok := m[key]; ok {
@@ -61,7 +47,7 @@ func safeGetMap(m map[string]interface{}, key string) (map[string]interface{}, b
 
 // rewriteAdditionalInterfaces filters and rewrites additional interfaces
 // - Keeps only HTTP/HTTPS transports
-// - Rewrites internal URLs to external gateway URLs
+// - Rewrites all URLs to external gateway URLs
 // - Removes unsupported transports (gRPC, WebSocket, SSE, etc.)
 func rewriteAdditionalInterfaces(interfaces []models.AgentInterface, gatewayURL string, agentPath string) []models.AgentInterface {
 	var result []models.AgentInterface
@@ -70,15 +56,7 @@ func rewriteAdditionalInterfaces(interfaces []models.AgentInterface, gatewayURL 
 	for _, iface := range interfaces {
 		// Only keep http and https transports
 		if iface.Transport == "http" || iface.Transport == "https" {
-			// Rewrite internal URLs
-			if isInternalURL(iface.Url) {
-				// TODO: Technical decision needed: Should we normalize transport field to match
-				// external URL scheme (https), or deduplicate interfaces when they all point to
-				// the same URL? Currently all internal URLs are rewritten to the same external
-				// gateway URL regardless of original transport (http/https/other), which may be
-				// misleading as transport field doesn't match the URL scheme.
-				iface.Url = externalURL
-			}
+			iface.Url = externalURL
 			result = append(result, iface)
 		}
 		// All other transports are implicitly removed
@@ -87,14 +65,12 @@ func rewriteAdditionalInterfaces(interfaces []models.AgentInterface, gatewayURL 
 	return result
 }
 
-// rewriteAgentCard transforms internal URLs to external gateway URLs in an agent card
+// rewriteAgentCard transforms all URLs to external gateway URLs in an agent card
 func rewriteAgentCard(card models.AgentCard, gatewayURL string, agentPath string) models.AgentCard {
 	externalURL := constructExternalURL(gatewayURL, agentPath)
 
-	// Rewrite main URL if it's internal
-	if isInternalURL(card.Url) {
-		card.Url = externalURL
-	}
+	// Rewrite main URL
+	card.Url = externalURL
 
 	// Rewrite and filter additional interfaces
 	card.AdditionalInterfaces = rewriteAdditionalInterfaces(card.AdditionalInterfaces, gatewayURL, agentPath)
@@ -106,7 +82,7 @@ func rewriteAgentCard(card models.AgentCard, gatewayURL string, agentPath string
 
 // rewriteAdditionalInterfacesMap filters and rewrites additional interfaces using map representation
 // - Keeps only HTTP/HTTPS transports
-// - Rewrites internal URLs to external gateway URLs
+// - Rewrites URLs to external gateway URLs
 // - Removes unsupported transports (gRPC, WebSocket, SSE, etc.)
 // - Preserves all other fields in the interface objects
 func rewriteAdditionalInterfacesMap(interfaces []interface{}, gatewayURL string, agentPath string) []interface{} {
@@ -128,17 +104,9 @@ func rewriteAdditionalInterfacesMap(interfaces []interface{}, gatewayURL string,
 
 		// Only keep http and https transports
 		if transport == "http" || transport == "https" {
-			// Get URL
-			if url, ok := safeGetString(ifaceMap, "url"); ok {
-				// Rewrite internal URLs
-				if isInternalURL(url) {
-					// TODO: Technical decision needed: Should we normalize transport field to match
-					// external URL scheme (https), or deduplicate interfaces when they all point to
-					// the same URL? Currently all internal URLs are rewritten to the same external
-					// gateway URL regardless of original transport (http/https/other), which may be
-					// misleading as transport field doesn't match the URL scheme.
-					ifaceMap["url"] = externalURL
-				}
+			// Rewrite URLs to gateway URL
+			if _, ok := safeGetString(ifaceMap, "url"); ok {
+				ifaceMap["url"] = externalURL
 			}
 			result = append(result, ifaceMap)
 		}
@@ -148,16 +116,14 @@ func rewriteAdditionalInterfacesMap(interfaces []interface{}, gatewayURL string,
 	return result
 }
 
-// rewriteAgentCardMap transforms internal URLs to external gateway URLs in an agent card map
+// rewriteAgentCardMap transforms URLs to external gateway URLs in an agent card map
 // This function preserves all unknown fields in the agent card
 func rewriteAgentCardMap(cardMap map[string]interface{}, gatewayURL string, agentPath string) map[string]interface{} {
 	externalURL := constructExternalURL(gatewayURL, agentPath)
 
-	// Rewrite main URL if it's internal
-	if url, ok := safeGetString(cardMap, "url"); ok {
-		if isInternalURL(url) {
-			cardMap["url"] = externalURL
-		}
+	// Rewrite main URL
+	if _, ok := safeGetString(cardMap, "url"); ok {
+		cardMap["url"] = externalURL
 	}
 
 	// Rewrite and filter additional interfaces

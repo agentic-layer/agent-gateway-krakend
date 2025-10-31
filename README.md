@@ -174,17 +174,9 @@ curl -H "Host: gateway.agentic-layer.ai" \
 
 #### What Gets Transformed
 
-- ✅ Internal URLs rewritten to gateway URLs:
-  - Kubernetes cluster URLs (`*.svc.cluster.local`)
-  - Kubernetes short-form names (`service-name`, `service-name.namespace`)
-  - Localhost and loopback (`localhost`, `127.0.0.1`, `::1`)
-  - Private IPs (RFC 1918: `10.x`, `172.16-31.x`, `192.168.x`)
-  - Docker internal hostnames (`*.docker.internal`)
-  - Special-use domains (`*.local`, `*.internal`, `*.localhost`)
-  - Link-local addresses (`169.254.x.x`, `fe80::`)
-- ✅ Transport filtering: Only HTTP/HTTPS kept, gRPC/WebSocket/SSE removed
-- ✅ External URLs preserved unchanged
-- ✅ Provider URLs never rewritten
+- ✅ **All URLs rewritten**: Agent endpoint URLs (`url` and `additionalInterfaces`) are always rewritten to gateway URLs
+- ✅ **Transport filtering**: Only HTTP/HTTPS kept, gRPC/WebSocket/SSE removed
+- ✅ **Provider URLs never rewritten**: Provider metadata remains unchanged
 
 #### Full Response Example
 
