@@ -135,6 +135,20 @@ curl -H "Host: gateway.agentic-layer.ai" \
 
 > **Note**: The `Host` header is required for URL rewriting. In production, the ingress/load balancer sets this automatically. For local testing, use `-H "Host: gateway.agentic-layer.ai"` with curl.
 
+### Test 3: Default Host Header Behavior
+
+When no explicit `Host` header is provided, curl automatically sends `Host: localhost:10000`:
+
+```bash
+curl http://localhost:10000/mock-agent/.well-known/agent-card.json | jq 
+```
+
+**What's happening:**
+- curl automatically sets `Host: localhost:10000` from the URL
+- The plugin uses this to rewrite URLs, resulting in `localhost:10000` in the response
+
+**Key takeaway:** To get production-like external URLs, explicitly set the Host header with `-H "Host: gateway.agentic-layer.ai"`.
+
 ## Contribution
 
 See [Contribution Guide](https://github.com/agentic-layer/agent-runtime-operator?tab=contributing-ov-file) for details on contribution, and the process for submitting pull requests.
