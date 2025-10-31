@@ -93,7 +93,6 @@ The `agentcard-rw` plugin rewrites Agent Card URLs to external gateway URLs and 
 Start the mock agent from `agent-samples`:
 
 ```bash
-cd ./PAAL/agent-samples/wiremock/mock-agent
 make docker-run  # Starts on port 8080
 ```
 
