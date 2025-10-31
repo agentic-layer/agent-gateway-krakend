@@ -56,6 +56,21 @@ func TestIsAgentCardEndpoint(t *testing.T) {
 			path:     "/",
 			expected: false,
 		},
+		{
+			name:     "agent path starting with well-known",
+			path:     "/.well-known/weather-agent/.well-known/agent-card.json",
+			expected: true,
+		},
+		{
+			name:     "multiple well-known segments in path",
+			path:     "/api/.well-known/agents/weather/.well-known/agent-card.json",
+			expected: true,
+		},
+		{
+			name:     "agent name contains well-known substring",
+			path:     "/my-.well-known-agent/.well-known/agent-card.json",
+			expected: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -123,6 +138,26 @@ func TestExtractAgentPath(t *testing.T) {
 			name:     "just slash",
 			path:     "/",
 			expected: "",
+		},
+		{
+			name:     "agent path starting with well-known",
+			path:     "/.well-known/weather-agent/.well-known/agent-card.json",
+			expected: "/.well-known/weather-agent",
+		},
+		{
+			name:     "multiple well-known segments in path",
+			path:     "/api/.well-known/agents/weather/.well-known/agent-card.json",
+			expected: "/api/.well-known/agents/weather",
+		},
+		{
+			name:     "agent name contains well-known substring",
+			path:     "/my-.well-known-agent/.well-known/agent-card.json",
+			expected: "/my-.well-known-agent",
+		},
+		{
+			name:     "well-known as agent name",
+			path:     "/.well-known/.well-known/agent-card.json",
+			expected: "/.well-known",
 		},
 	}
 
