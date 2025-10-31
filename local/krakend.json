@@ -23,32 +23,6 @@
   "name": "agent-gateway-krakend",
   "endpoints": [
     {
-      "endpoint": "/weather-agent/.well-known/agent-card.json",
-      "output_encoding": "no-op",
-      "method": "GET",
-      "backend": [
-        {
-          "host": [
-            "http://host.docker.internal:8000"
-          ],
-          "url_pattern": "/.well-known/agent-card.json"
-        }
-      ]
-    },
-    {
-      "endpoint": "/weather-agent",
-      "output_encoding": "no-op",
-      "method": "POST",
-      "backend": [
-        {
-          "host": [
-            "http://host.docker.internal:8000"
-          ],
-          "url_pattern": ""
-        }
-      ]
-    },
-    {
       "endpoint": "/mock-agent/.well-known/agent-card.json",
       "output_encoding": "no-op",
       "method": "GET",
