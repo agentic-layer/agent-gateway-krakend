@@ -65,17 +65,6 @@ func (h *testHelper) createJSONBackend(jsonData string) http.HandlerFunc {
 	})
 }
 
-// assertResponse checks response status and body
-func assertResponse(t *testing.T, rec *httptest.ResponseRecorder, wantCode int, wantBody string) {
-	t.Helper()
-	if rec.Code != wantCode {
-		t.Errorf("status code = %d, want %d", rec.Code, wantCode)
-	}
-	if rec.Body.String() != wantBody {
-		t.Errorf("body = %q, want %q", rec.Body.String(), wantBody)
-	}
-}
-
 // assertAgentCardURL checks the agent card URL matches expected
 func assertAgentCardURL(t *testing.T, card models.AgentCard, expectedURL string) {
 	t.Helper()
@@ -94,24 +83,6 @@ func defaultAgentCard() models.AgentCard {
 
 func withURL(card models.AgentCard, url string) models.AgentCard {
 	card.Url = url
-	return card
-}
-
-func withDescription(card models.AgentCard, desc string) models.AgentCard {
-	card.Description = desc
-	return card
-}
-
-func withInterfaces(card models.AgentCard, interfaces []models.AgentInterface) models.AgentCard {
-	card.AdditionalInterfaces = interfaces
-	return card
-}
-
-func withProvider(card models.AgentCard, org, url string) models.AgentCard {
-	card.Provider = &models.AgentProvider{
-		Organization: org,
-		Url:          url,
-	}
 	return card
 }
 
@@ -514,8 +485,8 @@ func TestMissingHostHeaderError(t *testing.T) {
 	}
 
 	// Verify error message
-	if !strings.Contains(rec.Body.String(), "Host header is required") {
-		t.Errorf("error message = %q, want to contain 'Host header is required'", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "Missing host header") {
+		t.Errorf("error message = %q, want to contain 'Missing host header'", rec.Body.String())
 	}
 }
 

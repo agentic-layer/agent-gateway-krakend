@@ -11,11 +11,11 @@ func getGatewayURL(req *http.Request) (string, error) {
 	host := req.Host
 
 	if host == "" {
-		return "", fmt.Errorf("Host header is required for agent card URL rewriting")
+		return "", fmt.Errorf("Missing host header in request")
 	}
 
-	// Default to https, but check X-Forwarded-Proto header
-	scheme := "https"
+	// Default to http, but check X-Forwarded-Proto header
+	scheme := "http"
 	if proto := req.Header.Get("X-Forwarded-Proto"); proto != "" {
 		scheme = proto
 	}

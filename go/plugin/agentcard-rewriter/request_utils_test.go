@@ -24,7 +24,7 @@ func TestGetGatewayURL(t *testing.T) {
 			name:        "default https without proto header",
 			host:        "gateway.agentic-layer.ai",
 			proto:       "",
-			expected:    "https://gateway.agentic-layer.ai",
+			expected:    "http://gateway.agentic-layer.ai",
 			expectError: false,
 		},
 		{
@@ -55,7 +55,7 @@ func TestGetGatewayURL(t *testing.T) {
 			expected:    "https://gateway.agentic-layer.ai:443",
 			expectError: false,
 		},
-		{ // todo does this example make sense?
+		{
 			name:        "internal cluster variant with port",
 			host:        "service.namespace.svc.cluster.local:8080",
 			proto:       "http",
