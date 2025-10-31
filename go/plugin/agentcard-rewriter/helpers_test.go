@@ -141,7 +141,6 @@ func TestGetGatewayURL(t *testing.T) {
 		name        string
 		host        string
 		proto       string
-		cfg         config
 		expected    string
 		expectError bool
 	}{
@@ -149,7 +148,6 @@ func TestGetGatewayURL(t *testing.T) {
 			name:        "https with explicit proto header",
 			host:        "gateway.agentic-layer.ai",
 			proto:       "https",
-			cfg:         config{},
 			expected:    "https://gateway.agentic-layer.ai",
 			expectError: false,
 		},
@@ -157,31 +155,27 @@ func TestGetGatewayURL(t *testing.T) {
 			name:        "default https without proto header",
 			host:        "gateway.agentic-layer.ai",
 			proto:       "",
-			cfg:         config{},
 			expected:    "https://gateway.agentic-layer.ai",
 			expectError: false,
 		},
 		{
-			name:        "http proto header with localhost requires config",
+			name:        "http proto header with localhost",
 			host:        "localhost:10000",
 			proto:       "http",
-			cfg:         config{},
-			expected:    "",
-			expectError: true, // localhost is now detected as internal
+			expected:    "http://localhost:10000",
+			expectError: false,
 		},
 		{
-			name:        "internal cluster host with no config fallback should error",
+			name:        "internal cluster host uses Host header",
 			host:        "agent-gateway.default.svc.cluster.local",
 			proto:       "https",
-			cfg:         config{},
-			expected:    "",
-			expectError: true,
+			expected:    "https://agent-gateway.default.svc.cluster.local",
+			expectError: false,
 		},
 		{
-			name:        "empty host with no config fallback should error",
+			name:        "empty host should error",
 			host:        "",
 			proto:       "https",
-			cfg:         config{},
 			expected:    "",
 			expectError: true,
 		},
@@ -189,46 +183,28 @@ func TestGetGatewayURL(t *testing.T) {
 			name:        "host with port",
 			host:        "gateway.agentic-layer.ai:443",
 			proto:       "https",
-			cfg:         config{},
 			expected:    "https://gateway.agentic-layer.ai:443",
 			expectError: false,
 		},
-		{
-			name:        "another internal cluster variant with no config",
+		{ // todo does this example make sense?
+			name:        "internal cluster variant with port",
 			host:        "service.namespace.svc.cluster.local:8080",
 			proto:       "http",
-			cfg:         config{},
-			expected:    "",
-			expectError: true,
-		},
-		{
-			name:  "internal cluster host with config fallback",
-			host:  "agent-gateway.default.svc.cluster.local",
-			proto: "https",
-			cfg: config{
-				GatewayURL: "https://gateway.agentic-layer.ai",
-			},
-			expected:    "https://gateway.agentic-layer.ai",
+			expected:    "http://service.namespace.svc.cluster.local:8080",
 			expectError: false,
 		},
 		{
-			name:  "empty host with config fallback",
-			host:  "",
-			proto: "https",
-			cfg: config{
-				GatewayURL: "https://configured-gateway.example.com",
-			},
-			expected:    "https://configured-gateway.example.com",
-			expectError: false,
-		},
-		{
-			name:  "headers take precedence over config",
-			host:  "gateway-from-header.example.com",
-			proto: "https",
-			cfg: config{
-				GatewayURL: "https://gateway-from-config.example.com",
-			},
+			name:        "external gateway host",
+			host:        "gateway-from-header.example.com",
+			proto:       "https",
 			expected:    "https://gateway-from-header.example.com",
+			expectError: false,
+		},
+		{
+			name:        "docker internal hostname",
+			host:        "host.docker.internal",
+			proto:       "http",
+			expected:    "http://host.docker.internal",
 			expectError: false,
 		},
 	}
@@ -243,7 +219,7 @@ func TestGetGatewayURL(t *testing.T) {
 				req.Header.Set("X-Forwarded-Proto", tt.proto)
 			}
 
-			result, err := getGatewayURL(req, tt.cfg)
+			result, err := getGatewayURL(req)
 
 			if tt.expectError {
 				if err == nil {

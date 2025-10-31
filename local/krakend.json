@@ -11,12 +11,7 @@
       "@comment_name": "Name order defines handler order. Last entry is outermost/first handler.",
       "name": [
         "openai-a2a", "agentcard-rw"
-      ],
-      "agentcard-rw": {
-        "agentcard_rw_config": {
-          "gateway_url": "https://gateway.agentic-layer.ai"
-        }
-      }
+      ]
     },
     "router": {
       "disable_access_log": false,

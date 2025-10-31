@@ -5,97 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
 )
-
-// Test configuration strings
-const (
-	configStrEmpty   = `{}`
-	configStrMinimal = `{
-		"agentcard_rw_config": {}
-	}`
-	configStrWithURL = `{
-		"agentcard_rw_config": {
-			"gateway_url": "https://configured-gateway.example.com"
-		}
-	}`
-	configStrInvalidConfig = `{
-		"agentcard_rw_config": "not an object"
-	}`
-)
-
-// TestParseConfig verifies configuration parsing works correctly
-func TestParseConfig(t *testing.T) {
-	tests := []struct {
-		name        string
-		configJSON  string
-		expectError bool
-		checkFunc   func(t *testing.T, cfg config)
-	}{
-		{
-			name:        "empty config uses defaults",
-			configJSON:  configStrEmpty,
-			expectError: false,
-			checkFunc: func(t *testing.T, cfg config) {
-				if cfg.GatewayURL != "" {
-					t.Errorf("GatewayURL = %q, want empty", cfg.GatewayURL)
-				}
-			},
-		},
-		{
-			name:        "minimal config with empty values",
-			configJSON:  configStrMinimal,
-			expectError: false,
-			checkFunc: func(t *testing.T, cfg config) {
-				if cfg.GatewayURL != "" {
-					t.Errorf("GatewayURL = %q, want empty", cfg.GatewayURL)
-				}
-			},
-		},
-		{
-			name:        "config with gateway_url",
-			configJSON:  configStrWithURL,
-			expectError: false,
-			checkFunc: func(t *testing.T, cfg config) {
-				expected := "https://configured-gateway.example.com"
-				if cfg.GatewayURL != expected {
-					t.Errorf("GatewayURL = %q, want %q", cfg.GatewayURL, expected)
-				}
-			},
-		},
-		{
-			name:        "invalid config type should error",
-			configJSON:  configStrInvalidConfig,
-			expectError: true,
-			checkFunc:   func(t *testing.T, cfg config) {},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var extraConfig map[string]interface{}
-			if err := json.Unmarshal([]byte(tt.configJSON), &extraConfig); err != nil {
-				t.Fatalf("failed to unmarshal test config: %v", err)
-			}
-
-			var cfg config
-			err := parseConfig(extraConfig, &cfg)
-
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("parseConfig() expected error but got none")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("parseConfig() unexpected error: %v", err)
-				}
-				tt.checkFunc(t, cfg)
-			}
-		})
-	}
-}
 
 // TestPluginRegistration verifies the plugin can be registered
 func TestPluginRegistration(t *testing.T) {
@@ -399,8 +313,8 @@ func TestNonJSONContentTypePassThrough(t *testing.T) {
 	}
 }
 
-// TestInternalRequestPassThrough verifies internal cluster requests skip rewriting
-func TestInternalRequestPassThrough(t *testing.T) {
+// TestClusterHostRewriting verifies internal URLs are rewritten even with cluster hostname in Host header
+func TestClusterHostRewriting(t *testing.T) {
 	agentCard := models.AgentCard{
 		Name: "Test Agent",
 		Url:  "http://test-agent.default.svc.cluster.local:8000/",
@@ -428,7 +342,7 @@ func TestInternalRequestPassThrough(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	// Verify response passed through unchanged (no rewriting for internal requests)
+	// Verify response was rewritten
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
 	}
@@ -438,15 +352,15 @@ func TestInternalRequestPassThrough(t *testing.T) {
 		t.Fatalf("failed to parse response: %v", err)
 	}
 
-	// URL should remain internal (not rewritten)
-	if responseCard.Url != agentCard.Url {
-		t.Errorf("card.Url = %q, want unchanged %q", responseCard.Url, agentCard.Url)
+	// URL should be rewritten to use the Host header from request
+	expectedURL := "http://agent-gateway.default.svc.cluster.local:10000/test-agent"
+	if responseCard.Url != expectedURL {
+		t.Errorf("card.Url = %q, want %q", responseCard.Url, expectedURL)
 	}
 }
 
-// TestInternalRequestPassThroughLocalhost verifies localhost requests skip rewriting
-// Tests localhost request source with private IP agent URL
-func TestInternalRequestPassThroughLocalhost(t *testing.T) {
+// TestLocalhostHostRewriting verifies private IP URLs are rewritten even with localhost in Host header
+func TestLocalhostHostRewriting(t *testing.T) {
 	agentCard := models.AgentCard{
 		Name: "Test Agent",
 		Url:  "http://192.168.1.100:8000/",
@@ -459,13 +373,13 @@ func TestInternalRequestPassThroughLocalhost(t *testing.T) {
 		_, _ = w.Write(cardJSON)
 	})
 
-	// Create the plugin handler with no config (should fail without valid Host header)
+	// Create the plugin handler
 	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
 	if err != nil {
 		t.Fatalf("failed to register handler: %v", err)
 	}
 
-	// Create test request with localhost as host (internal source)
+	// Create test request with localhost as host
 	req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
 	req.Host = "localhost:10000"
 	req.Header.Set("X-Forwarded-Proto", "http")
@@ -474,7 +388,7 @@ func TestInternalRequestPassThroughLocalhost(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	// Verify response passed through unchanged (no rewriting for localhost requests)
+	// Verify response was rewritten
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
 	}
@@ -484,9 +398,10 @@ func TestInternalRequestPassThroughLocalhost(t *testing.T) {
 		t.Fatalf("failed to parse response: %v", err)
 	}
 
-	// URL should remain internal (not rewritten) since request came from localhost
-	if responseCard.Url != agentCard.Url {
-		t.Errorf("card.Url = %q, want unchanged %q", responseCard.Url, agentCard.Url)
+	// URL should be rewritten to use the Host header from request
+	expectedURL := "http://localhost:10000/test-agent"
+	if responseCard.Url != expectedURL {
+		t.Errorf("card.Url = %q, want %q", responseCard.Url, expectedURL)
 	}
 }
 
@@ -587,119 +502,42 @@ func TestEmptyAgentNamePassThrough(t *testing.T) {
 	}
 }
 
-// TestConfigFallbackIntegration verifies config fallback works end-to-end
-func TestConfigFallbackIntegration(t *testing.T) {
-	tests := []struct {
-		name          string
-		configJSON    string
-		requestHost   string
-		expectedURL   string
-		shouldRewrite bool
-	}{
-		{
-			name: "internal cluster host with config fallback",
-			configJSON: `{
-				"agentcard_rw_config": {
-					"gateway_url": "https://configured-gateway.example.com"
-				}
-			}`,
-			requestHost:   "agent-gateway.default.svc.cluster.local:10000",
-			expectedURL:   "https://configured-gateway.example.com/test-agent",
-			shouldRewrite: true,
-		},
-		{
-			name: "empty host with config fallback",
-			configJSON: `{
-				"agentcard_rw_config": {
-					"gateway_url": "https://configured-gateway.example.com"
-				}
-			}`,
-			requestHost:   "",
-			expectedURL:   "https://configured-gateway.example.com/test-agent",
-			shouldRewrite: true,
-		},
-		{
-			name: "headers take precedence over config",
-			configJSON: `{
-				"agentcard_rw_config": {
-					"gateway_url": "https://configured-gateway.example.com"
-				}
-			}`,
-			requestHost:   "header-gateway.example.com",
-			expectedURL:   "https://header-gateway.example.com/test-agent",
-			shouldRewrite: true,
-		},
-		{
-			name: "docker internal hostname with config fallback",
-			configJSON: `{
-				"agentcard_rw_config": {
-					"gateway_url": "https://configured-gateway.example.com"
-				}
-			}`,
-			requestHost:   "host.docker.internal",
-			expectedURL:   "https://configured-gateway.example.com/test-agent",
-			shouldRewrite: true,
-		},
+// TestMissingHostHeaderError verifies HTTP 500 error when Host header is missing
+func TestMissingHostHeaderError(t *testing.T) {
+	agentCard := models.AgentCard{
+		Name: "Test Agent",
+		Url:  "http://test-agent.default.svc.cluster.local:8000/",
+	}
+	cardJSON, _ := json.Marshal(agentCard)
+
+	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(cardJSON)
+	})
+
+	// Create the plugin handler
+	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
+	if err != nil {
+		t.Fatalf("failed to register handler: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock backend that returns an agent card with internal URLs
-			// Use different internal URL patterns for different test cases
-			agentURL := "http://test-agent.default.svc.cluster.local:8000/"
-			if tt.name == "docker internal hostname with config fallback" {
-				agentURL = "http://api-service.internal:8000/"
-			}
+	// Create test request with empty Host header
+	req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
+	req.Host = ""
 
-			agentCard := models.AgentCard{
-				Name:    "Test Agent",
-				Url:     agentURL,
-				Version: "1.0.0",
-			}
-			cardJSON, _ := json.Marshal(agentCard)
+	// Record response
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
 
-			backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusOK)
-				_, _ = w.Write(cardJSON)
-			})
+	// Verify HTTP 500 error response
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status code = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
 
-			// Parse config
-			var extraConfig map[string]interface{}
-			if err := json.Unmarshal([]byte(tt.configJSON), &extraConfig); err != nil {
-				t.Fatalf("failed to unmarshal config: %v", err)
-			}
-
-			// Create the plugin handler with config
-			handler, err := HandlerRegisterer.registerHandlers(context.Background(), extraConfig, backend)
-			if err != nil {
-				t.Fatalf("failed to register handler: %v", err)
-			}
-
-			// Create test request
-			req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
-			req.Host = tt.requestHost
-			req.Header.Set("X-Forwarded-Proto", "https")
-
-			// Record response
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
-
-			// Verify response
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
-			}
-
-			var responseCard models.AgentCard
-			if err := json.Unmarshal(rec.Body.Bytes(), &responseCard); err != nil {
-				t.Fatalf("failed to parse response: %v", err)
-			}
-
-			// Verify URL was rewritten correctly
-			if responseCard.Url != tt.expectedURL {
-				t.Errorf("card.Url = %q, want %q", responseCard.Url, tt.expectedURL)
-			}
-		})
+	// Verify error message
+	if !strings.Contains(rec.Body.String(), "Host header is required") {
+		t.Errorf("error message = %q, want to contain 'Host header is required'", rec.Body.String())
 	}
 }
 

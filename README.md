@@ -86,7 +86,7 @@ curl http://localhost:8080/weather-agent \
 
 ### Testing Agent Card URL Rewriting
 
-The `agentcard-rw` plugin rewrites internal Kubernetes cluster URLs to external gateway URLs and filters out unsupported transports.
+The `agentcard-rw` plugin rewrites Agent Card URLs to external gateway URLs and filters out unsupported transports. The plugin uses the `Host` header from incoming requests to construct the external gateway URL.
 
 #### Prerequisites
 
@@ -220,7 +220,7 @@ curl -H "Host: gateway.agentic-layer.ai" \
 ```
 </details>
 
-> **Note**: In production, the ingress/load balancer sets the `Host` header (e.g., `gateway.agentic-layer.ai`), which takes precedence over the configured `gateway_url`. The config provides a fallback for local testing.
+> **Note**: The plugin requires the `Host` header to be set in the request. In production, the ingress/load balancer automatically sets this header (e.g., `gateway.agentic-layer.ai`). For local testing, use the `-H "Host: ..."` flag with curl.
 
 ## Contribution
 
