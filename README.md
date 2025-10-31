@@ -63,7 +63,7 @@ docker run -p 8080:8080 -v $(pwd)/local/krakend.json:/etc/krakend/krakend.json:r
 Start all services using Docker Compose:
 
 ```bash
-docker-compose up
+docker compose up
 
 # Wait for plugins to load (look for these logs):
 # [AGENTCARD-RW  ] loaded
