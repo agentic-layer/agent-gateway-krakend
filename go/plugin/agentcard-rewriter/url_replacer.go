@@ -7,10 +7,10 @@ import (
 // constructExternalURL builds the external gateway URL from gateway URL and agent path
 func constructExternalURL(gatewayURL string, agentPath string) string {
 	// Remove trailing slashes
-	gatewayURL = strings.TrimSuffix(gatewayURL, "/")
-	agentPath = strings.TrimSuffix(agentPath, "/")
+	cleanGatewayURL := strings.TrimSuffix(gatewayURL, "/")
+	cleanAgentPath := strings.TrimSuffix(agentPath, "/")
 
-	return gatewayURL + agentPath
+	return cleanGatewayURL + cleanAgentPath
 }
 
 // safeGetString safely extracts a string value from a map
