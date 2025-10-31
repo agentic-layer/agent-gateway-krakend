@@ -75,7 +75,6 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			gatewayURL, err := getGatewayURL(req)
 			if err != nil {
 				reqLogger.Error("cannot determine gateway URL: %s", err)
-				// Todo: NOTE Passing through was removed, please confirm ok
 				http.Error(w, "Host header is required for agent card URL rewriting", http.StatusInternalServerError)
 				return
 			}
@@ -129,8 +128,6 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 
 			reqLogger.Info("transformed agent card URLs to external gateway format")
 
-			// Write the transformed response
-			w.Header().Set("Content-Type", "application/json")
 			// Remove Content-Length to allow for recalculation
 			w.Header().Del("Content-Length")
 			w.WriteHeader(http.StatusOK)
