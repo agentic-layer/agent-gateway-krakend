@@ -11,6 +11,110 @@ import (
 	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
 )
 
+// Test constants
+const (
+	testGatewayHost   = "gateway.agentic-layer.ai"
+	testAgentCardPath = "/.well-known/agent-card.json"
+	testHTTPSProtocol = "https"
+	testHTTPProtocol  = "http"
+	contentTypeJSON   = "application/json"
+)
+
+// testHelper provides utility methods for test setup
+type testHelper struct {
+	t *testing.T
+}
+
+func newTestHelper(t *testing.T) *testHelper {
+	return &testHelper{t: t}
+}
+
+func (h *testHelper) createPluginHandler(backend http.HandlerFunc) http.Handler {
+	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
+	if err != nil {
+		h.t.Fatalf("failed to register handler: %v", err)
+	}
+	return handler
+}
+
+func (h *testHelper) makeRequest(handler http.Handler, method, path, host, protocol string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, nil)
+	req.Host = host
+	if protocol != "" {
+		req.Header.Set("X-Forwarded-Proto", protocol)
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	return rec
+}
+
+func (h *testHelper) createAgentCardBackend(card models.AgentCard) http.HandlerFunc {
+	cardJSON, _ := json.Marshal(card)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", contentTypeJSON)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(cardJSON)
+	})
+}
+
+func (h *testHelper) createJSONBackend(jsonData string) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", contentTypeJSON)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(jsonData))
+	})
+}
+
+// assertResponse checks response status and body
+func assertResponse(t *testing.T, rec *httptest.ResponseRecorder, wantCode int, wantBody string) {
+	t.Helper()
+	if rec.Code != wantCode {
+		t.Errorf("status code = %d, want %d", rec.Code, wantCode)
+	}
+	if rec.Body.String() != wantBody {
+		t.Errorf("body = %q, want %q", rec.Body.String(), wantBody)
+	}
+}
+
+// assertAgentCardURL checks the agent card URL matches expected
+func assertAgentCardURL(t *testing.T, card models.AgentCard, expectedURL string) {
+	t.Helper()
+	if card.Url != expectedURL {
+		t.Errorf("card.Url = %q, want %q", card.Url, expectedURL)
+	}
+}
+
+// AgentCard factory functions
+func defaultAgentCard() models.AgentCard {
+	return models.AgentCard{
+		Name:    "Test Agent",
+		Version: "1.0.0",
+	}
+}
+
+func withURL(card models.AgentCard, url string) models.AgentCard {
+	card.Url = url
+	return card
+}
+
+func withDescription(card models.AgentCard, desc string) models.AgentCard {
+	card.Description = desc
+	return card
+}
+
+func withInterfaces(card models.AgentCard, interfaces []models.AgentInterface) models.AgentCard {
+	card.AdditionalInterfaces = interfaces
+	return card
+}
+
+func withProvider(card models.AgentCard, org, url string) models.AgentCard {
+	card.Provider = &models.AgentProvider{
+		Organization: org,
+		Url:          url,
+	}
+	return card
+}
+
 // TestPluginRegistration verifies the plugin can be registered
 func TestPluginRegistration(t *testing.T) {
 	var called bool
@@ -177,278 +281,135 @@ func TestAgentCardInterception(t *testing.T) {
 	}
 }
 
-// TestNonOKStatusPassThrough verifies non-OK responses pass through unchanged
-func TestNonOKStatusPassThrough(t *testing.T) {
+// TestErrorConditionsPassThrough verifies various error conditions cause plugin to return early
+func TestErrorConditionsPassThrough(t *testing.T) {
 	tests := []struct {
-		name       string
-		statusCode int
-		body       string
+		name        string
+		statusCode  int
+		contentType string
+		body        string
+		description string
 	}{
 		{
-			name:       "404 Not Found",
-			statusCode: http.StatusNotFound,
-			body:       "not found",
+			name:        "404 Not Found",
+			statusCode:  http.StatusNotFound,
+			contentType: contentTypeJSON,
+			body:        "not found",
+			description: "non-OK status codes",
 		},
 		{
-			name:       "500 Internal Server Error",
-			statusCode: http.StatusInternalServerError,
-			body:       "internal error",
+			name:        "500 Internal Server Error",
+			statusCode:  http.StatusInternalServerError,
+			contentType: contentTypeJSON,
+			body:        "internal error",
+			description: "non-OK status codes",
 		},
 		{
-			name:       "403 Forbidden",
-			statusCode: http.StatusForbidden,
-			body:       "forbidden",
+			name:        "403 Forbidden",
+			statusCode:  http.StatusForbidden,
+			contentType: contentTypeJSON,
+			body:        "forbidden",
+			description: "non-OK status codes",
+		},
+		{
+			name:        "Malformed JSON",
+			statusCode:  http.StatusOK,
+			contentType: contentTypeJSON,
+			body:        `{"invalid": json}`,
+			description: "malformed JSON",
+		},
+		{
+			name:        "Non-JSON Content Type",
+			statusCode:  http.StatusOK,
+			contentType: "text/html",
+			body:        "<html><body>Not JSON</body></html>",
+			description: "non-JSON content types",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock backend that returns non-OK status
+			helper := newTestHelper(t)
+
+			// Create backend that returns the error condition
 			backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("X-Request-ID", "test-request-id-123")
-				w.Header().Set("Cache-Control", "no-cache")
-				w.Header().Set("X-Custom-Header", "custom-value")
+				w.Header().Set("Content-Type", tt.contentType)
+				w.Header().Set("X-Request-ID", "test-request-id")
 				w.WriteHeader(tt.statusCode)
 				_, _ = w.Write([]byte(tt.body))
 			})
 
-			// Create the plugin handler
-			handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
-			if err != nil {
-				t.Fatalf("failed to register handler: %v", err)
-			}
+			handler := helper.createPluginHandler(backend)
+			rec := helper.makeRequest(handler, http.MethodGet, "/test-agent"+testAgentCardPath, testGatewayHost, testHTTPSProtocol)
 
-			// Create test request
-			req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
-			req.Host = "gateway.agentic-layer.ai"
-			req.Header.Set("X-Forwarded-Proto", "https")
-
-			// Record response
-			rec := httptest.NewRecorder()
-			handler.ServeHTTP(rec, req)
-
-			// Plugin returns early for non-OK status, so response is empty (default 200)
+			// Plugin returns early for error conditions, so response is empty (default 200)
 			// The backend response is captured but not written to the final response
-			if rec.Code != http.StatusOK {
-				t.Errorf("status code = %d, want %d (plugin returns early)", rec.Code, http.StatusOK)
-			}
-			if rec.Body.String() != "" {
-				t.Errorf("body = %q, want empty (plugin returns early)", rec.Body.String())
-			}
+			assertResponse(t, rec, http.StatusOK, "")
 		})
 	}
 }
 
-// TestMalformedJSONPassThrough verifies malformed JSON responses pass through
-func TestMalformedJSONPassThrough(t *testing.T) {
-	malformedJSON := `{"invalid": json}`
-
-	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Request-ID", "malformed-json-request-id")
-		w.Header().Set("X-Custom-Header", "malformed-json-value")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(malformedJSON))
-	})
-
-	// Create the plugin handler
-	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
-	if err != nil {
-		t.Fatalf("failed to register handler: %v", err)
+// TestURLRewritingScenarios verifies URL rewriting with various host configurations
+func TestURLRewritingScenarios(t *testing.T) {
+	tests := []struct {
+		name        string
+		inputURL    string
+		agentPath   string
+		requestHost string
+		protocol    string
+		expectedURL string
+	}{
+		{
+			name:        "Cluster hostname with internal URL",
+			inputURL:    "http://test-agent.default.svc.cluster.local:8000/",
+			agentPath:   "/test-agent",
+			requestHost: "agent-gateway.default.svc.cluster.local:10000",
+			protocol:    testHTTPProtocol,
+			expectedURL: "http://agent-gateway.default.svc.cluster.local:10000/test-agent",
+		},
+		{
+			name:        "Localhost with private IP URL",
+			inputURL:    "http://192.168.1.100:8000/",
+			agentPath:   "/test-agent",
+			requestHost: "localhost:10000",
+			protocol:    testHTTPProtocol,
+			expectedURL: "http://localhost:10000/test-agent",
+		},
+		{
+			name:        "External URL rewritten to gateway",
+			inputURL:    "https://external-agent.example.com/api",
+			agentPath:   "/external-agent",
+			requestHost: testGatewayHost,
+			protocol:    testHTTPSProtocol,
+			expectedURL: "https://gateway.agentic-layer.ai/external-agent",
+		},
 	}
 
-	// Create test request
-	req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
-	req.Host = "gateway.agentic-layer.ai"
-	req.Header.Set("X-Forwarded-Proto", "https")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			helper := newTestHelper(t)
 
-	// Record response
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
+			// Create agent card with test URL
+			agentCard := withURL(defaultAgentCard(), tt.inputURL)
+			backend := helper.createAgentCardBackend(agentCard)
+			handler := helper.createPluginHandler(backend)
 
-	// Plugin returns early for malformed JSON, so response is empty (default 200)
-	// The backend response is captured but not written to the final response
-	if rec.Code != http.StatusOK {
-		t.Errorf("status code = %d, want %d (plugin returns early)", rec.Code, http.StatusOK)
-	}
-	if rec.Body.String() != "" {
-		t.Errorf("body = %q, want empty (plugin returns early)", rec.Body.String())
-	}
-}
+			// Make request
+			rec := helper.makeRequest(handler, http.MethodGet, tt.agentPath+testAgentCardPath, tt.requestHost, tt.protocol)
 
-// TestNonJSONContentTypePassThrough verifies non-JSON responses pass through
-func TestNonJSONContentTypePassThrough(t *testing.T) {
-	htmlResponse := "<html><body>Not JSON</body></html>"
+			// Verify response
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
+			}
 
-	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		w.Header().Set("X-Request-ID", "html-request-id")
-		w.Header().Set("X-Custom-Header", "html-custom-value")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(htmlResponse))
-	})
+			var responseCard models.AgentCard
+			if err := json.Unmarshal(rec.Body.Bytes(), &responseCard); err != nil {
+				t.Fatalf("failed to parse response: %v", err)
+			}
 
-	// Create the plugin handler
-	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
-	if err != nil {
-		t.Fatalf("failed to register handler: %v", err)
-	}
-
-	// Create test request
-	req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
-	req.Host = "gateway.agentic-layer.ai"
-	req.Header.Set("X-Forwarded-Proto", "https")
-
-	// Record response
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	// Plugin returns early for non-JSON content type, so response is empty (default 200)
-	// The backend response is captured but not written to the final response
-	if rec.Code != http.StatusOK {
-		t.Errorf("status code = %d, want %d (plugin returns early)", rec.Code, http.StatusOK)
-	}
-	if rec.Body.String() != "" {
-		t.Errorf("body = %q, want empty (plugin returns early)", rec.Body.String())
-	}
-}
-
-// TestClusterHostRewriting verifies internal URLs are rewritten even with cluster hostname in Host header
-func TestClusterHostRewriting(t *testing.T) {
-	agentCard := models.AgentCard{
-		Name: "Test Agent",
-		Url:  "http://test-agent.default.svc.cluster.local:8000/",
-	}
-	cardJSON, _ := json.Marshal(agentCard)
-
-	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(cardJSON)
-	})
-
-	// Create the plugin handler
-	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
-	if err != nil {
-		t.Fatalf("failed to register handler: %v", err)
-	}
-
-	// Create test request with internal cluster host
-	req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
-	req.Host = "agent-gateway.default.svc.cluster.local:10000"
-	req.Header.Set("X-Forwarded-Proto", "http")
-
-	// Record response
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	// Verify response was rewritten
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	var responseCard models.AgentCard
-	if err := json.Unmarshal(rec.Body.Bytes(), &responseCard); err != nil {
-		t.Fatalf("failed to parse response: %v", err)
-	}
-
-	// URL should be rewritten to use the Host header from request
-	expectedURL := "http://agent-gateway.default.svc.cluster.local:10000/test-agent"
-	if responseCard.Url != expectedURL {
-		t.Errorf("card.Url = %q, want %q", responseCard.Url, expectedURL)
-	}
-}
-
-// TestLocalhostHostRewriting verifies private IP URLs are rewritten even with localhost in Host header
-func TestLocalhostHostRewriting(t *testing.T) {
-	agentCard := models.AgentCard{
-		Name: "Test Agent",
-		Url:  "http://192.168.1.100:8000/",
-	}
-	cardJSON, _ := json.Marshal(agentCard)
-
-	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(cardJSON)
-	})
-
-	// Create the plugin handler
-	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
-	if err != nil {
-		t.Fatalf("failed to register handler: %v", err)
-	}
-
-	// Create test request with localhost as host
-	req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
-	req.Host = "localhost:10000"
-	req.Header.Set("X-Forwarded-Proto", "http")
-
-	// Record response
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	// Verify response was rewritten
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	var responseCard models.AgentCard
-	if err := json.Unmarshal(rec.Body.Bytes(), &responseCard); err != nil {
-		t.Fatalf("failed to parse response: %v", err)
-	}
-
-	// URL should be rewritten to use the Host header from request
-	expectedURL := "http://localhost:10000/test-agent"
-	if responseCard.Url != expectedURL {
-		t.Errorf("card.Url = %q, want %q", responseCard.Url, expectedURL)
-	}
-}
-
-// TestExternalURLRewritten verifies external URLs in agent cards are rewritten
-func TestExternalURLRewritten(t *testing.T) {
-	externalURL := "https://external-agent.example.com/api"
-	agentCard := models.AgentCard{
-		Name: "External Agent",
-		Url:  externalURL,
-	}
-	cardJSON, _ := json.Marshal(agentCard)
-
-	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(cardJSON)
-	})
-
-	// Create the plugin handler
-	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
-	if err != nil {
-		t.Fatalf("failed to register handler: %v", err)
-	}
-
-	// Create test request
-	req := httptest.NewRequest(http.MethodGet, "/external-agent/.well-known/agent-card.json", nil)
-	req.Host = "gateway.agentic-layer.ai"
-	req.Header.Set("X-Forwarded-Proto", "https")
-
-	// Record response
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	// Verify response
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status code = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	var responseCard models.AgentCard
-	if err := json.Unmarshal(rec.Body.Bytes(), &responseCard); err != nil {
-		t.Fatalf("failed to parse response: %v", err)
-	}
-
-	// External URL should be rewritten to gateway URL
-	expectedURL := "https://gateway.agentic-layer.ai/external-agent"
-	if responseCard.Url != expectedURL {
-		t.Errorf("card.Url = %q, want %q", responseCard.Url, expectedURL)
+			// Verify URL was rewritten to expected value
+			assertAgentCardURL(t, responseCard, tt.expectedURL)
+		})
 	}
 }
 
