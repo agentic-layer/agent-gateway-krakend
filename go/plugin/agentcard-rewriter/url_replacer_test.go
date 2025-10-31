@@ -82,24 +82,25 @@ func TestRewriteAdditionalInterfacesMap(t *testing.T) {
 		expected   []interface{}
 	}{
 		{
-			name: "rewrite internal http and https, remove grpc",
+			name: "rewrite all valid transports (JSONRPC, GRPC, HTTP+JSON)",
 			interfaces: []interface{}{
-				map[string]interface{}{"transport": "http", "url": "http://agent.svc.cluster.local:8000/"},
-				map[string]interface{}{"transport": "https", "url": "https://agent.svc.cluster.local:8443/"},
-				map[string]interface{}{"transport": "grpc", "url": "http://agent.svc.cluster.local:9000/"},
+				map[string]interface{}{"transport": "JSONRPC", "url": "http://agent.svc.cluster.local:8000/"},
+				map[string]interface{}{"transport": "GRPC", "url": "https://agent.svc.cluster.local:8443/"},
+				map[string]interface{}{"transport": "HTTP+JSON", "url": "http://agent.svc.cluster.local:9000/"},
 			},
 			gatewayURL: "https://gateway.ai",
 			agentPath:  "/test-agent",
 			expected: []interface{}{
-				map[string]interface{}{"transport": "http", "url": "https://gateway.ai/test-agent"},
-				map[string]interface{}{"transport": "https", "url": "https://gateway.ai/test-agent"},
+				map[string]interface{}{"transport": "JSONRPC", "url": "https://gateway.ai/test-agent"},
+				map[string]interface{}{"transport": "GRPC", "url": "https://gateway.ai/test-agent"},
+				map[string]interface{}{"transport": "HTTP+JSON", "url": "https://gateway.ai/test-agent"},
 			},
 		},
 		{
 			name: "preserve custom fields in interfaces",
 			interfaces: []interface{}{
 				map[string]interface{}{
-					"transport":   "http",
+					"transport":   "HTTP+JSON",
 					"url":         "http://agent.svc.cluster.local:8000/",
 					"customField": "custom-value",
 					"nested": map[string]interface{}{
@@ -111,7 +112,7 @@ func TestRewriteAdditionalInterfacesMap(t *testing.T) {
 			agentPath:  "/test-agent",
 			expected: []interface{}{
 				map[string]interface{}{
-					"transport":   "http",
+					"transport":   "HTTP+JSON",
 					"url":         "https://gateway.ai/test-agent",
 					"customField": "custom-value",
 					"nested": map[string]interface{}{
@@ -121,27 +122,31 @@ func TestRewriteAdditionalInterfacesMap(t *testing.T) {
 			},
 		},
 		{
-			name: "rewrite all URLs",
+			name: "rewrite all URLs with valid transports",
 			interfaces: []interface{}{
-				map[string]interface{}{"transport": "http", "url": "https://external.example.com/agent"},
-				map[string]interface{}{"transport": "http", "url": "http://agent.svc.cluster.local:8000/"},
+				map[string]interface{}{"transport": "JSONRPC", "url": "https://external.example.com/agent"},
+				map[string]interface{}{"transport": "HTTP+JSON", "url": "http://agent.svc.cluster.local:8000/"},
 			},
 			gatewayURL: "https://gateway.ai",
 			agentPath:  "/test-agent",
 			expected: []interface{}{
-				map[string]interface{}{"transport": "http", "url": "https://gateway.ai/test-agent"},
-				map[string]interface{}{"transport": "http", "url": "https://gateway.ai/test-agent"},
+				map[string]interface{}{"transport": "JSONRPC", "url": "https://gateway.ai/test-agent"},
+				map[string]interface{}{"transport": "HTTP+JSON", "url": "https://gateway.ai/test-agent"},
 			},
 		},
 		{
-			name: "remove all non-http transports",
+			name: "filter invalid transports, keep valid ones",
 			interfaces: []interface{}{
 				map[string]interface{}{"transport": "grpc", "url": "http://agent.svc.cluster.local:9000/"},
 				map[string]interface{}{"transport": "websocket", "url": "ws://agent.svc.cluster.local:8080/"},
+				map[string]interface{}{"transport": "http", "url": "http://agent.svc.cluster.local:8000/"},
+				map[string]interface{}{"transport": "https", "url": "https://agent.svc.cluster.local:8443/"},
 			},
 			gatewayURL: "https://gateway.ai",
 			agentPath:  "/test-agent",
-			expected:   []interface{}{},
+			expected: []interface{}{
+				map[string]interface{}{"transport": "grpc", "url": "https://gateway.ai/test-agent"},
+			},
 		},
 	}
 
@@ -247,29 +252,39 @@ func TestRewriteAgentCardMap(t *testing.T) {
 			},
 		},
 		{
-			name: "rewrite additionalInterfaces",
+			name: "rewrite and filter additionalInterfaces",
 			cardMap: map[string]interface{}{
 				"url":     "http://agent.svc.cluster.local:8000/",
 				"version": "1.0.0",
 				"additionalInterfaces": []interface{}{
-					map[string]interface{}{"transport": "http", "url": "http://agent.svc.cluster.local:8000/"},
+					map[string]interface{}{"transport": "HTTP+JSON", "url": "http://agent.svc.cluster.local:8000/"},
 					map[string]interface{}{"transport": "grpc", "url": "http://agent.svc.cluster.local:9000/"},
+					map[string]interface{}{"transport": "websocket", "url": "ws://agent.svc.cluster.local:8080/"},
 				},
 			},
 			gatewayURL: "https://gateway.ai",
 			agentPath:  "/test-agent",
 			checkFunc: func(t *testing.T, result map[string]interface{}) {
 				interfaces := result["additionalInterfaces"].([]interface{})
-				if len(interfaces) != 1 {
-					t.Errorf("len(additionalInterfaces) = %d, want 1", len(interfaces))
+				if len(interfaces) != 2 {
+					t.Errorf("len(additionalInterfaces) = %d, want 2 (HTTP+JSON and grpc are valid, websocket filtered)", len(interfaces))
 					return
 				}
-				iface := interfaces[0].(map[string]interface{})
-				if iface["transport"] != "http" {
-					t.Errorf("interface transport = %v, want http", iface["transport"])
+				// First interface should be HTTP+JSON
+				iface0 := interfaces[0].(map[string]interface{})
+				if iface0["transport"] != "HTTP+JSON" {
+					t.Errorf("interface[0] transport = %v, want HTTP+JSON", iface0["transport"])
 				}
-				if iface["url"] != "https://gateway.ai/test-agent" {
-					t.Errorf("interface url = %v, want rewritten URL", iface["url"])
+				if iface0["url"] != "https://gateway.ai/test-agent" {
+					t.Errorf("interface[0] url = %v, want rewritten URL", iface0["url"])
+				}
+				// Second interface should be grpc
+				iface1 := interfaces[1].(map[string]interface{})
+				if iface1["transport"] != "grpc" {
+					t.Errorf("interface[1] transport = %v, want grpc", iface1["transport"])
+				}
+				if iface1["url"] != "https://gateway.ai/test-agent" {
+					t.Errorf("interface[1] url = %v, want rewritten URL", iface1["url"])
 				}
 			},
 		},
