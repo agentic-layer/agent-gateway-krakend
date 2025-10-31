@@ -203,8 +203,8 @@ func TestAgentCardInterception(t *testing.T) {
 		Url:         "http://localhost:8000/",
 		Version:     "1.0.0",
 		AdditionalInterfaces: []models.AgentInterface{
-			{Transport: "http", Url: "http://weather-agent:8080/"},
-			{Transport: "http", Url: "http://10.0.1.50:8000/"},
+			{Transport: "JSONRPC", Url: "http://weather-agent:8080/"},
+			{Transport: "HTTP+JSON", Url: "http://10.0.1.50:8000/"},
 			{Transport: "grpc", Url: "http://test-agent.default.svc.cluster.local:9000/"},
 		},
 		Provider: &models.AgentProvider{
@@ -255,18 +255,19 @@ func TestAgentCardInterception(t *testing.T) {
 		t.Errorf("card.Url = %q, want %q", responseCard.Url, expectedURL)
 	}
 
-	// Verify grpc interface was removed (only http interfaces remain)
-	if len(responseCard.AdditionalInterfaces) != 2 {
-		t.Errorf("len(AdditionalInterfaces) = %d, want 2", len(responseCard.AdditionalInterfaces))
+	// Verify all valid transport interfaces are kept (JSONRPC, GRPC, HTTP+JSON)
+	if len(responseCard.AdditionalInterfaces) != 3 {
+		t.Errorf("len(AdditionalInterfaces) = %d, want 3", len(responseCard.AdditionalInterfaces))
 	}
 
-	// Verify all http interfaces were rewritten to external gateway URL
+	// Verify all valid interfaces were rewritten to external gateway URL
+	expectedTransports := []string{"JSONRPC", "HTTP+JSON", "grpc"}
 	for i, iface := range responseCard.AdditionalInterfaces {
 		if iface.Url != expectedURL {
 			t.Errorf("AdditionalInterfaces[%d].Url = %q, want %q", i, iface.Url, expectedURL)
 		}
-		if iface.Transport != "http" {
-			t.Errorf("AdditionalInterfaces[%d].Transport = %q, want http", i, iface.Transport)
+		if iface.Transport != expectedTransports[i] {
+			t.Errorf("AdditionalInterfaces[%d].Transport = %q, want %s", i, iface.Transport, expectedTransports[i])
 		}
 	}
 
@@ -519,7 +520,7 @@ func TestUnknownFieldPreservation(t *testing.T) {
 		"customArray": [1, 2, 3],
 		"additionalInterfaces": [
 			{
-				"transport": "http",
+				"transport": "HTTP+JSON",
 				"url": "http://test-agent.default.svc.cluster.local:8000/",
 				"customField": "should-be-preserved"
 			},
@@ -594,19 +595,27 @@ func TestUnknownFieldPreservation(t *testing.T) {
 	if interfaces, ok := responseMap["additionalInterfaces"].([]interface{}); !ok {
 		t.Error("additionalInterfaces field was lost")
 	} else {
-		if len(interfaces) != 1 {
-			t.Errorf("additionalInterfaces length = %d, want 1 (grpc should be filtered out)", len(interfaces))
+		if len(interfaces) != 2 {
+			t.Errorf("additionalInterfaces length = %d, want 2 (both HTTP+JSON and grpc are valid)", len(interfaces))
 		}
 		if len(interfaces) > 0 {
+			// First interface should be HTTP+JSON with custom field
 			iface := interfaces[0].(map[string]interface{})
-			if iface["transport"] != "http" {
-				t.Errorf("interface transport = %v, want 'http'", iface["transport"])
+			if iface["transport"] != "HTTP+JSON" {
+				t.Errorf("interface transport = %v, want 'HTTP+JSON'", iface["transport"])
 			}
 			if iface["url"] != "https://gateway.agentic-layer.ai/test-agent" {
 				t.Errorf("interface url = %v, want rewritten URL", iface["url"])
 			}
 			if iface["customField"] != "should-be-preserved" {
 				t.Errorf("interface customField = %v, want 'should-be-preserved'", iface["customField"])
+			}
+		}
+		if len(interfaces) > 1 {
+			// Second interface should be grpc
+			iface := interfaces[1].(map[string]interface{})
+			if iface["transport"] != "grpc" {
+				t.Errorf("interface[1] transport = %v, want 'grpc'", iface["transport"])
 			}
 		}
 	}

@@ -4,6 +4,21 @@ import (
 	"strings"
 )
 
+// Valid transport protocol constants
+const (
+	transportJSONRPC  = "jsonrpc"
+	transportGRPC     = "grpc"
+	transportHTTPJSON = "http+json"
+)
+
+// isValidTransport checks if a transport type is valid (case-insensitive)
+func isValidTransport(transport string) bool {
+	normalized := strings.ToLower(transport)
+	return normalized == transportJSONRPC ||
+		normalized == transportGRPC ||
+		normalized == transportHTTPJSON
+}
+
 // constructExternalURL builds the external gateway URL from gateway URL and agent path
 func constructExternalURL(gatewayURL string, agentPath string) string {
 	// Remove trailing slashes
@@ -34,9 +49,8 @@ func safeGetArray(m map[string]interface{}, key string) ([]interface{}, bool) {
 }
 
 // rewriteAdditionalInterfacesMap filters and rewrites additional interfaces using map representation
-// - Keeps only HTTP/HTTPS transports
+// - Keeps only valid transports (JSONRPC, GRPC, HTTP+JSON) - case-insensitive
 // - Rewrites URLs to external gateway URLs
-// - Removes unsupported transports (gRPC, WebSocket, SSE, etc.)
 // - Preserves all other fields in the interface objects
 func rewriteAdditionalInterfacesMap(interfaces []interface{}, gatewayURL string, agentPath string) []interface{} {
 	var result []interface{}
@@ -55,15 +69,15 @@ func rewriteAdditionalInterfacesMap(interfaces []interface{}, gatewayURL string,
 			continue // Skip entries without transport
 		}
 
-		// Only keep http and https transports
-		if transport == "http" || transport == "https" {
+		// Only keep valid transports (JSONRPC, GRPC, HTTP+JSON - case-insensitive)
+		if isValidTransport(transport) {
 			// Rewrite URLs to gateway URL
 			if _, ok := safeGetString(ifaceMap, "url"); ok {
 				ifaceMap["url"] = externalURL
 			}
 			result = append(result, ifaceMap)
 		}
-		// All other transports are implicitly removed
+		// All invalid/unknown transports are implicitly removed
 	}
 
 	return result
