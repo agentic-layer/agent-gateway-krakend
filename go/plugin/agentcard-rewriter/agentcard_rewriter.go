@@ -71,11 +71,11 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 		if req.Method == http.MethodGet && isAgentCardEndpoint(req.URL.Path) {
 			reqLogger.Debug("intercepted agent card request: %s", req.URL.Path)
 
-			// Get gateway URL from request headers
+			// Get gateway URL
 			gatewayURL, err := getGatewayURL(req)
 			if err != nil {
 				reqLogger.Error("cannot determine gateway URL: %s", err)
-				http.Error(w, "Host header is required for agent card URL rewriting", http.StatusInternalServerError)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 
@@ -97,21 +97,24 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 
 			// Only transform successful responses
 			if rw.statusCode != http.StatusOK {
-				reqLogger.Info("backend returned non-OK status: %d - passing through", rw.statusCode)
+				reqLogger.Info("backend returned non-OK status: %d - returning error", rw.statusCode)
+				http.Error(w, "Backend service returned an error", rw.statusCode)
 				return
 			}
 
 			// Validate content type
 			contentType := rw.Header().Get("Content-Type")
 			if !strings.Contains(contentType, "application/json") {
-				reqLogger.Warn("unexpected content-type: %s - passing through", contentType)
+				reqLogger.Warn("unexpected content-type: %s - returning error", contentType)
+				http.Error(w, "Expected application/json content type", http.StatusInternalServerError)
 				return
 			}
 
 			// Parse agent card into map to preserve unknown fields
 			var agentCardMap map[string]interface{}
 			if err := json.Unmarshal(rw.body.Bytes(), &agentCardMap); err != nil {
-				reqLogger.Error("failed to parse agent card: %s - passing through original", err)
+				reqLogger.Error("failed to parse agent card: %s - returning error", err)
+				http.Error(w, "Failed to parse agent card JSON", http.StatusInternalServerError)
 				return
 			}
 
@@ -126,7 +129,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 				return
 			}
 
-			reqLogger.Info("transformed agent card URLs to external gateway format")
+			reqLogger.Debug("transformed agent card URLs to external gateway format")
 
 			// Remove Content-Length to allow for recalculation
 			w.Header().Del("Content-Length")

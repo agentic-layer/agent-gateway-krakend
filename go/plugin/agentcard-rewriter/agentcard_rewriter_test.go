@@ -343,9 +343,24 @@ func TestErrorConditionsPassThrough(t *testing.T) {
 			handler := helper.createPluginHandler(backend)
 			rec := helper.makeRequest(handler, http.MethodGet, "/test-agent"+testAgentCardPath, testGatewayHost, testHTTPSProtocol)
 
-			// Plugin returns early for error conditions, so response is empty (default 200)
-			// The backend response is captured but not written to the final response
-			assertResponse(t, rec, http.StatusOK, "")
+			// Plugin returns http.Error for error conditions
+			// Verify appropriate error status code is returned
+			if rec.Code != tt.statusCode && tt.statusCode != http.StatusOK {
+				// For non-OK backend status, plugin should return the same status with error message
+				if rec.Code != tt.statusCode {
+					t.Errorf("status code = %d, want %d", rec.Code, tt.statusCode)
+				}
+			} else if tt.statusCode == http.StatusOK {
+				// For OK status with bad content, plugin should return 500
+				if rec.Code != http.StatusInternalServerError {
+					t.Errorf("status code = %d, want %d", rec.Code, http.StatusInternalServerError)
+				}
+			}
+
+			// Verify error message is present
+			if rec.Body.Len() == 0 {
+				t.Error("expected error message in response body")
+			}
 		})
 	}
 }
