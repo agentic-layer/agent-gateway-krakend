@@ -83,8 +83,5 @@ func rewriteAgentCardMap(cardMap map[string]interface{}, gatewayURL string, agen
 	if interfaces, ok := safeGetArray(cardMap, "additionalInterfaces"); ok {
 		cardMap["additionalInterfaces"] = rewriteAdditionalInterfacesMap(interfaces, gatewayURL, agentPath)
 	}
-
-	// Provider URL is never rewritten (it's organizational metadata, not an agent endpoint)
-
 	return cardMap
 }

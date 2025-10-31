@@ -139,16 +139,7 @@ curl -X POST http://localhost:8080/__admin/mappings \
 Start the KrakenD gateway:
 
 ```bash
-cd /path/to/agent-gateway-krakend
-
-# Option 1: Using Docker Compose
-docker-compose up --build
-
-# Option 2: Using Docker directly
-docker build -t agentic-layer/agent-gateway-krakend .
-docker run -p 10000:10000 \
-  -v $(pwd)/local/krakend.json:/etc/krakend/krakend.json:ro \
-  agentic-layer/agent-gateway-krakend
+docker-compose
 ```
 
 Wait for the plugins to load (look for these logs):
