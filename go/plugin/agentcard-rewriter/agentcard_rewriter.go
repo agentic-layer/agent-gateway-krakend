@@ -69,7 +69,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 
 		// Check if this is a GET request to an agent card endpoint
 		if req.Method == http.MethodGet && isAgentCardEndpoint(req.URL.Path) {
-			reqLogger.Info("intercepted agent card request: %s", req.URL.Path)
+			reqLogger.Debug("intercepted agent card request: %s", req.URL.Path)
 
 			// Get gateway URL from request headers
 			gatewayURL, err := getGatewayURL(req)
@@ -88,7 +88,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 				return
 			}
 
-			reqLogger.Info("rewriting URLs for agent path: %s, gateway: %s", agentPath, gatewayURL)
+			reqLogger.Debug("rewriting URLs for agent path: %s, gateway: %s", agentPath, gatewayURL)
 
 			// Wrap response writer to capture backend response
 			rw := newResponseWriter(w)
