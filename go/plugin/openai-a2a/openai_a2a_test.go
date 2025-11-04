@@ -396,8 +396,9 @@ func Test_transformOpenAIToA2A(t *testing.T) {
 		Temperature: 0.7,
 	}
 
-	a2aReq := transformOpenAIToA2A(openAIReq)
+	a2aReq, err := transformOpenAIToA2A(openAIReq)
 
+	assert.Nil(t, err)
 	assert.Equal(t, "2.0", a2aReq.Jsonrpc)
 	assert.Equal(t, 1, a2aReq.Id)
 	assert.Equal(t, "message/send", a2aReq.Method)
@@ -420,7 +421,9 @@ func Test_transformOpenAIToA2A_WithMultipleMessages(t *testing.T) {
 		},
 	}
 
-	a2aReq := transformOpenAIToA2A(openAIReq)
+	a2aReq, err := transformOpenAIToA2A(openAIReq)
+
+	assert.Nil(t, err)
 
 	// Last message should be the primary message
 	assert.Equal(t, "message", a2aReq.Params.Message.Kind)

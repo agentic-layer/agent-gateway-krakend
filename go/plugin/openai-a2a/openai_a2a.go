@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -113,7 +114,12 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 			}
 
 			// Transform to A2A format
-			a2aReq := transformOpenAIToA2A(openAIReq)
+			a2aReq, err := transformOpenAIToA2A(openAIReq)
+			if err != nil {
+				reqLogger.Error("failed to transform OpenAI request: %s", err)
+				http.Error(w, "invalid OpenAI request", http.StatusBadRequest)
+				return
+			}
 
 			// Marshal A2A request
 			a2aBody, err := json.Marshal(a2aReq)
@@ -276,12 +282,17 @@ func transformA2AToOpenAI(a2aResp models.SendMessageSuccessResponse, originalReq
 }
 
 // transformOpenAIToA2A converts OpenAI chat completion request to A2A format
-func transformOpenAIToA2A(openAIReq models.OpenAIRequest) models.SendMessageRequest {
+func transformOpenAIToA2A(openAIReq models.OpenAIRequest) (*models.SendMessageRequest, error) {
 	contextID := uuid.New().String()
 	messageID := uuid.New().String()
 
+	numMessages := len(openAIReq.Messages)
+	if numMessages == 0 {
+		return nil, errors.New("no messages found")
+	}
+
 	// Get the last message (the current user message)
-	lastMsg := openAIReq.Messages[len(openAIReq.Messages)-1]
+	lastMsg := openAIReq.Messages[numMessages-1]
 
 	// Create the main message
 	message := models.Message{
@@ -309,7 +320,7 @@ func transformOpenAIToA2A(openAIReq models.OpenAIRequest) models.SendMessageRequ
 		},
 	}
 
-	return a2aReq
+	return &a2aReq, nil
 }
 
 func parseConfig(extra map[string]interface{}, config *config) error {
