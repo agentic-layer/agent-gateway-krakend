@@ -1,6 +1,14 @@
 # Agent Gateway KrakenD
 
-A [KrakenD](https://www.krakend.io/docs/ai-gateway/) based Agent Gateway implementation that serves as an egress API gateway for routing incoming requests to exposed agents within the agentic platform.
+A [KrakenD](https://www.krakend.io/docs/) based Agent Gateway implementation that serves as an egress API gateway for routing incoming requests to exposed agents within the agentic platform.
+
+## Plugins
+
+Following plugins are included in this repository:
+
+- [Agent Card URL Rewriting Plugin](go/plugin/agentcard-rw/README.md)
+- [OpenAI A2A Plugin](go/plugin/openai-a2a/README.md)
+
 
 ## Development
 
@@ -10,58 +18,37 @@ The following tools are required for development:
 
 - **Docker**: For containerization and local development
 
-### Build and Deploy
+### Building Plugins
 
-#### Building Plugins
-
-Build the openai-a2a plugin:
-
-```bash
-cd go
-make openai-a2a
+```shell
+make plugins
 ```
 
-This will compile the plugin and output it to `build/openai-a2a.so`.
+This will compile the plugins and output it to `build/`.
 
-#### Docker Compose
+### Run with Docker Compose
 
 Start the agent gateway using Docker Compose:
 
-```bash
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your configuration
+```shell
 # Then start the services
-docker-compose up --build
+docker compose up --build
 ```
 
 Stop the services:
 
-```bash
-docker-compose down
+```shell
+docker compose down
 ```
 
-#### Manual Docker Build
+## Testing
 
-Build the Docker image:
+### A2A via JSON-RPC
 
-```bash
-docker build -t agentic-layer/agent-gateway-krakend .
-```
+Verify the gateway proxy functionality with a JSON-RPC message:
 
-Run the container locally:
-
-```bash
-docker run -p 8080:8080 -v $(pwd)/local/krakend.json:/etc/krakend/krakend.json:ro agentic-layer/agent-gateway-krakend
-```
-
-### Testing the Gateway
-
-Test the proxy functionality:
-
-```bash
-curl http://localhost:8080/weather-agent \
+```shell
+curl http://localhost:10000/mock-agent \
   -H "Content-Type: application/json" \
   -d '{
      "jsonrpc": "2.0",
@@ -73,7 +60,7 @@ curl http://localhost:8080/weather-agent \
          "parts": [
            {
              "kind": "text",
-             "text": "What is the weather in New York?"
+             "text": "Hello, mock agent!"
            }
          ],
          "messageId": "9229e770-767c-417b-a0b0-f0741243c589",
@@ -84,6 +71,7 @@ curl http://localhost:8080/weather-agent \
    }' | jq
 ```
 
+
 ## Contribution
 
-See [Contribution Guide](https://github.com/agentic-layer/agent-runtime-operator?tab=contributing-ov-file) for details on contribution, and the process for submitting pull requests.
+See [Contribution Guide](https://github.com/agentic-layer/agent-gateway-krakend?tab=contributing-ov-file) for details on contribution, and the process for submitting pull requests.

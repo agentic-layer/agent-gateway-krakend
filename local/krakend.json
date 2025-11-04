@@ -5,12 +5,12 @@
     "pattern": ".so",
     "folder": "/unleash/tentacles/"
   },
-  "port": 8080,
+  "port": 10000,
   "extra_config": {
     "plugin/http-server": {
       "@comment_name": "Name order defines handler order. Last entry is outermost/first handler.",
       "name": [
-        "openai-a2a"
+        "openai-a2a", "agentcard-rw"
       ]
     },
     "router": {
@@ -23,13 +23,26 @@
   "name": "agent-gateway-krakend",
   "endpoints": [
     {
-      "endpoint": "/weather-agent",
+      "endpoint": "/mock-agent/.well-known/agent-card.json",
+      "output_encoding": "no-op",
+      "method": "GET",
+      "backend": [
+        {
+          "host": [
+            "http://mock-agent:8080"
+          ],
+          "url_pattern": "/.well-known/agent-card.json"
+        }
+      ]
+    },
+    {
+      "endpoint": "/mock-agent",
       "output_encoding": "no-op",
       "method": "POST",
       "backend": [
         {
           "host": [
-            "http://host.docker.internal:8000"
+            "http://mock-agent:8080"
           ],
           "url_pattern": ""
         }

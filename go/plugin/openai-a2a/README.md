@@ -82,7 +82,7 @@ The endpoint suffix is `/chat/completions` by default, but can be configured:
 ### Example Usage
 
 ```bash
-curl http://localhost:8080/weather-agent/chat/completions \
+curl http://localhost:10000/mock-agent/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-4",
