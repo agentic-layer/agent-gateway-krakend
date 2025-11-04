@@ -59,7 +59,7 @@ func (rw *responseWriter) WriteHeader(statusCode int) {
 	rw.statusCode = statusCode
 }
 
-func (r registerer) registerHandlers(_ context.Context, extra map[string]interface{}, handler http.Handler) (http.Handler, error) {
+func (r registerer) registerHandlers(_ context.Context, _ map[string]interface{}, handler http.Handler) (http.Handler, error) {
 	logger.Info("plugin initialized successfully")
 	return http.HandlerFunc(r.handleRequest(handler)), nil
 }

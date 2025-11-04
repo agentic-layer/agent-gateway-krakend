@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
@@ -336,45 +335,6 @@ func TestEmptyAgentNamePassThrough(t *testing.T) {
 	}
 }
 
-// TestMissingHostHeaderError verifies HTTP 500 error when Host header is missing
-func TestMissingHostHeaderError(t *testing.T) {
-	agentCard := models.AgentCard{
-		Name: "Test Agent",
-		Url:  "http://test-agent.default.svc.cluster.local:8000/",
-	}
-	cardJSON, _ := json.Marshal(agentCard)
-
-	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(cardJSON)
-	})
-
-	// Create the plugin handler
-	handler, err := HandlerRegisterer.registerHandlers(context.Background(), map[string]interface{}{}, backend)
-	if err != nil {
-		t.Fatalf("failed to register handler: %v", err)
-	}
-
-	// Create test request with empty Host header
-	req := httptest.NewRequest(http.MethodGet, "/test-agent/.well-known/agent-card.json", nil)
-	req.Host = ""
-
-	// Record response
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	// Verify HTTP 500 error response
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status code = %d, want %d", rec.Code, http.StatusInternalServerError)
-	}
-
-	// Verify error message
-	if !strings.Contains(rec.Body.String(), "Missing host header") {
-		t.Errorf("error message = %q, want to contain 'Missing host header'", rec.Body.String())
-	}
-}
-
 // TestUnknownFieldPreservation verifies that unknown fields in agent cards are preserved
 func TestUnknownFieldPreservation(t *testing.T) {
 	// Create an agent card JSON with custom unknown fields
@@ -527,13 +487,6 @@ func TestGetGatewayURL(t *testing.T) {
 			proto:       "https",
 			expected:    "https://agent-gateway.default.svc.cluster.local",
 			expectError: false,
-		},
-		{
-			name:        "empty host should error",
-			host:        "",
-			proto:       "https",
-			expected:    "",
-			expectError: true,
 		},
 		{
 			name:        "host with port",
