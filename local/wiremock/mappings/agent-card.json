@@ -15,9 +15,9 @@
       "protocolVersion": "0.3.0",
       "capabilities": {},
       "supportsAuthenticatedExtendedCard": false,
-      "url": "http://localhost:8080",
+      "url": "http://localhost:8000",
       "additionalInterfaces": [
-        {"transport": "JSONRPC", "url": "http://mock-agent:8080"},
+        {"transport": "JSONRPC", "url": "http://mock-agent:8000"},
         {"transport": "HTTP+JSON", "url": "http://10.96.1.50:8443"},
         {"transport": "grpc", "url": "http://mock-agent.default.svc.cluster.local:9090"}
       ],

@@ -29,7 +29,7 @@
       "backend": [
         {
           "host": [
-            "http://mock-agent:8080"
+            "http://mock-agent:8000"
           ],
           "url_pattern": "/.well-known/agent-card.json"
         }
@@ -42,7 +42,7 @@
       "backend": [
         {
           "host": [
-            "http://mock-agent:8080"
+            "http://mock-agent:8000"
           ],
           "url_pattern": ""
         }

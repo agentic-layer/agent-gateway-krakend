@@ -10,8 +10,8 @@ services:
       - ./local/krakend.json:/etc/krakend/krakend.json:ro
 
   mock-agent:
-    image: ghcr.io/agentic-layer/mock-agent:0.5
+    image: ghcr.io/agentic-layer/mock-agent:0.6
     ports:
-      - "8080:8080"
+      - "8000:8000"
     volumes:
       - ./local/wiremock:/home/wiremock/mappings:ro
