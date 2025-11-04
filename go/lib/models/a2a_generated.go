@@ -817,6 +817,90 @@ type ListTaskPushNotificationConfigSuccessResponse struct {
 	Result []TaskPushNotificationConfig `json:"result" yaml:"result" mapstructure:"result"`
 }
 
+// Parameters for listing tasks with optional filtering criteria.
+type ListTasksParams struct {
+	// Filter tasks by context ID to get tasks from a specific conversation or
+	// session.
+	ContextId *string `json:"contextId,omitempty" yaml:"contextId,omitempty" mapstructure:"contextId,omitempty"`
+
+	// Number of recent messages to include in each task's history. Must be
+	// non-negative. Defaults to 0 if not specified.
+	HistoryLength *int `json:"historyLength,omitempty" yaml:"historyLength,omitempty" mapstructure:"historyLength,omitempty"`
+
+	// Whether to include artifacts in the returned tasks. Defaults to false to reduce
+	// payload size.
+	IncludeArtifacts *bool `json:"includeArtifacts,omitempty" yaml:"includeArtifacts,omitempty" mapstructure:"includeArtifacts,omitempty"`
+
+	// Filter tasks updated after this timestamp (milliseconds since epoch). Only
+	// tasks with a last updated time greater than or equal to this value will be
+	// returned.
+	LastUpdatedAfter *int `json:"lastUpdatedAfter,omitempty" yaml:"lastUpdatedAfter,omitempty" mapstructure:"lastUpdatedAfter,omitempty"`
+
+	// Request-specific metadata.
+	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+
+	// Maximum number of tasks to return. Must be between 1 and 100. Defaults to 50 if
+	// not specified.
+	PageSize *int `json:"pageSize,omitempty" yaml:"pageSize,omitempty" mapstructure:"pageSize,omitempty"`
+
+	// Token for pagination. Use the nextPageToken from a previous ListTasksResult
+	// response.
+	PageToken *string `json:"pageToken,omitempty" yaml:"pageToken,omitempty" mapstructure:"pageToken,omitempty"`
+
+	// Filter tasks by their current status state.
+	Status *TaskState `json:"status,omitempty" yaml:"status,omitempty" mapstructure:"status,omitempty"`
+}
+
+// JSON-RPC request model for the 'tasks/list' method.
+type ListTasksRequest struct {
+	// A unique identifier established by the client. It must be a String, a Number,
+	// or null.
+	// The server must reply with the same value in the response. This property is
+	// omitted for notifications.
+	Id interface{} `json:"id" yaml:"id" mapstructure:"id"`
+
+	// The version of the JSON-RPC protocol. MUST be exactly "2.0".
+	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
+
+	// A String containing the name of the method to be invoked.
+	Method string `json:"method" yaml:"method" mapstructure:"method"`
+
+	// A Structured value that holds the parameter values to be used during the
+	// invocation of the method.
+	Params *ListTasksParams `json:"params,omitempty" yaml:"params,omitempty" mapstructure:"params,omitempty"`
+}
+
+// JSON-RPC response for the 'tasks/list' method.
+type ListTasksResponse interface{}
+
+// Result object for tasks/list method containing an array of tasks and pagination
+// information.
+type ListTasksResult struct {
+	// Token for retrieving the next page. Empty string if no more results.
+	NextPageToken string `json:"nextPageToken" yaml:"nextPageToken" mapstructure:"nextPageToken"`
+
+	// Maximum number of tasks returned in this response.
+	PageSize int `json:"pageSize" yaml:"pageSize" mapstructure:"pageSize"`
+
+	// Array of tasks matching the specified criteria.
+	Tasks []Task `json:"tasks" yaml:"tasks" mapstructure:"tasks"`
+
+	// Total number of tasks available (before pagination).
+	TotalSize int `json:"totalSize" yaml:"totalSize" mapstructure:"totalSize"`
+}
+
+// JSON-RPC success response model for the 'tasks/list' method.
+type ListTasksSuccessResponse struct {
+	// The identifier established by the client.
+	Id interface{} `json:"id" yaml:"id" mapstructure:"id"`
+
+	// The version of the JSON-RPC protocol. MUST be exactly "2.0".
+	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
+
+	// The result object on success.
+	Result ListTasksResult `json:"result" yaml:"result" mapstructure:"result"`
+}
+
 // Represents a single message in the conversation between a user and an agent.
 type Message struct {
 	// The context ID for this message, used to group related interactions.
@@ -960,37 +1044,102 @@ type OpenIdConnectSecurityScheme struct {
 	Type string `json:"type" yaml:"type" mapstructure:"type"`
 }
 
-// A discriminated union representing a part of a message or artifact, which can
-// be text, a file, or structured data.
-type Part interface{}
+type JSONRPCErrorResponseError_3 = MethodNotFoundError
 
-// Defines base properties common to all message or artifact parts.
-type PartBase struct {
-	// Optional metadata associated with this part.
+// An A2A-specific error indicating that the task is in a state where it cannot be
+// canceled.
+type TaskNotCancelableError struct {
+	// The error code for a task that cannot be canceled.
+	Code int `json:"code" yaml:"code" mapstructure:"code"`
+
+	// A primitive or structured value containing additional information about the
+	// error.
+	// This may be omitted.
+	Data interface{} `json:"data,omitempty" yaml:"data,omitempty" mapstructure:"data,omitempty"`
+
+	// The error message.
+	Message string `json:"message" yaml:"message" mapstructure:"message"`
+}
+
+// An A2A-specific error indicating that the agent does not support push
+// notifications.
+type PushNotificationNotSupportedError struct {
+	// The error code for when push notifications are not supported.
+	Code int `json:"code" yaml:"code" mapstructure:"code"`
+
+	// A primitive or structured value containing additional information about the
+	// error.
+	// This may be omitted.
+	Data interface{} `json:"data,omitempty" yaml:"data,omitempty" mapstructure:"data,omitempty"`
+
+	// The error message.
+	Message string `json:"message" yaml:"message" mapstructure:"message"`
+}
+
+// An A2A-specific error indicating that the requested operation is not supported
+// by the agent.
+type UnsupportedOperationError struct {
+	// The error code for an unsupported operation.
+	Code int `json:"code" yaml:"code" mapstructure:"code"`
+
+	// A primitive or structured value containing additional information about the
+	// error.
+	// This may be omitted.
+	Data interface{} `json:"data,omitempty" yaml:"data,omitempty" mapstructure:"data,omitempty"`
+
+	// The error message.
+	Message string `json:"message" yaml:"message" mapstructure:"message"`
+}
+
+const TaskStateUnknown TaskState = "unknown"
+
+type JSONRPCErrorResponseError_1 = JSONParseError
+type JSONRPCErrorResponseError_2 = InvalidRequestError
+
+// Represents a single, stateful operation or conversation between a client and an
+// agent.
+type Task struct {
+	// A collection of artifacts generated by the agent during the execution of the
+	// task.
+	Artifacts []Artifact `json:"artifacts,omitempty" yaml:"artifacts,omitempty" mapstructure:"artifacts,omitempty"`
+
+	// A server-generated unique identifier (e.g. UUID) for maintaining context across
+	// multiple related tasks or interactions.
+	ContextId string `json:"contextId" yaml:"contextId" mapstructure:"contextId"`
+
+	// An array of messages exchanged during the task, representing the conversation
+	// history.
+	History []Message `json:"history,omitempty" yaml:"history,omitempty" mapstructure:"history,omitempty"`
+
+	// A unique identifier (e.g. UUID) for the task, generated by the server for a new
+	// task.
+	Id string `json:"id" yaml:"id" mapstructure:"id"`
+
+	// The type of this object, used as a discriminator. Always 'task' for a Task.
+	Kind string `json:"kind" yaml:"kind" mapstructure:"kind"`
+
+	// Optional metadata for extensions. The key is an extension-specific identifier.
 	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+
+	// The current status of the task, including its state and a descriptive message.
+	Status TaskStatus `json:"status" yaml:"status" mapstructure:"status"`
 }
 
-// Defines configuration details for the OAuth 2.0 Resource Owner Password flow.
-type PasswordOAuthFlow struct {
-	// The URL to be used for obtaining refresh tokens. This MUST be a URL.
-	RefreshUrl *string `json:"refreshUrl,omitempty" yaml:"refreshUrl,omitempty" mapstructure:"refreshUrl,omitempty"`
+type JSONRPCErrorResponseError_4 = InvalidParamsError
+type JSONRPCErrorResponseError_5 = InternalError
+type JSONRPCErrorResponseError_6 = TaskNotFoundError
+type JSONRPCErrorResponseError_7 = TaskNotCancelableError
+type JSONRPCErrorResponseError_8 = PushNotificationNotSupportedError
+type JSONRPCErrorResponseError_9 = UnsupportedOperationError
+type JSONRPCErrorResponseError_10 = ContentTypeNotSupportedError
+type JSONRPCErrorResponseError_11 = InvalidAgentResponseError
+type JSONRPCErrorResponseError_12 = AuthenticatedExtendedCardNotConfiguredError
 
-	// The available scopes for the OAuth2 security scheme. A map between the scope
-	// name and a short description for it.
-	Scopes map[string]string `json:"scopes" yaml:"scopes" mapstructure:"scopes"`
-
-	// The token URL to be used for this flow. This MUST be a URL.
-	TokenUrl string `json:"tokenUrl" yaml:"tokenUrl" mapstructure:"tokenUrl"`
-}
-
-// Defines authentication details for a push notification endpoint.
-type PushNotificationAuthenticationInfo struct {
-	// Optional credentials required by the push notification endpoint.
-	Credentials *string `json:"credentials,omitempty" yaml:"credentials,omitempty" mapstructure:"credentials,omitempty"`
-
-	// A list of supported authentication schemes (e.g., 'Basic', 'Bearer').
-	Schemes []string `json:"schemes" yaml:"schemes" mapstructure:"schemes"`
-}
+const TaskStateFailed TaskState = "failed"
+const TaskStateCanceled TaskState = "canceled"
+const TaskStateCompleted TaskState = "completed"
+const TaskStateInputRequired TaskState = "input-required"
+const TaskStateWorking TaskState = "working"
 
 // Defines the configuration for setting up push notifications for task updates.
 type PushNotificationConfig struct {
@@ -1011,10 +1160,61 @@ type PushNotificationConfig struct {
 	Url string `json:"url" yaml:"url" mapstructure:"url"`
 }
 
-// An A2A-specific error indicating that the agent does not support push
-// notifications.
-type PushNotificationNotSupportedError struct {
-	// The error code for when push notifications are not supported.
+type TaskState string
+
+type GetTaskPushNotificationConfigRequestParams_0 = TaskIdParams
+
+const TaskStateAuthRequired TaskState = "auth-required"
+
+// A container associating a push notification configuration with a specific task.
+type TaskPushNotificationConfig struct {
+	// The push notification configuration for this task.
+	PushNotificationConfig PushNotificationConfig `json:"pushNotificationConfig" yaml:"pushNotificationConfig" mapstructure:"pushNotificationConfig"`
+
+	// The unique identifier (e.g. UUID) of the task.
+	TaskId string `json:"taskId" yaml:"taskId" mapstructure:"taskId"`
+}
+
+type GetTaskPushNotificationConfigRequestParams_1 = GetTaskPushNotificationConfigParams
+
+// Defines authentication details for a push notification endpoint.
+type PushNotificationAuthenticationInfo struct {
+	// Optional credentials required by the push notification endpoint.
+	Credentials *string `json:"credentials,omitempty" yaml:"credentials,omitempty" mapstructure:"credentials,omitempty"`
+
+	// A list of supported authentication schemes (e.g., 'Basic', 'Bearer').
+	Schemes []string `json:"schemes" yaml:"schemes" mapstructure:"schemes"`
+}
+
+type FilePartFile_1 = FileWithUri
+
+const TaskStateSubmitted TaskState = "submitted"
+
+// Defines parameters containing a task ID, used for simple task operations.
+type TaskIdParams struct {
+	// The unique identifier (e.g. UUID) of the task.
+	Id string `json:"id" yaml:"id" mapstructure:"id"`
+
+	// Optional metadata associated with the request.
+	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+}
+
+// Defines configuration details for the OAuth 2.0 Resource Owner Password flow.
+type PasswordOAuthFlow struct {
+	// The URL to be used for obtaining refresh tokens. This MUST be a URL.
+	RefreshUrl *string `json:"refreshUrl,omitempty" yaml:"refreshUrl,omitempty" mapstructure:"refreshUrl,omitempty"`
+
+	// The available scopes for the OAuth2 security scheme. A map between the scope
+	// name and a short description for it.
+	Scopes map[string]string `json:"scopes" yaml:"scopes" mapstructure:"scopes"`
+
+	// The token URL to be used for this flow. This MUST be a URL.
+	TokenUrl string `json:"tokenUrl" yaml:"tokenUrl" mapstructure:"tokenUrl"`
+}
+
+// An A2A-specific error indicating that the requested task ID was not found.
+type TaskNotFoundError struct {
+	// The error code for a task not found error.
 	Code int `json:"code" yaml:"code" mapstructure:"code"`
 
 	// A primitive or structured value containing additional information about the
@@ -1024,6 +1224,47 @@ type PushNotificationNotSupportedError struct {
 
 	// The error message.
 	Message string `json:"message" yaml:"message" mapstructure:"message"`
+}
+
+const TaskStateRejected TaskState = "rejected"
+
+type JSONRPCErrorResponseError_0 = JSONRPCError
+
+// Defines parameters for querying a task, with an option to limit history length.
+type TaskQueryParams struct {
+	// The number of most recent messages from the task's history to retrieve.
+	HistoryLength *int `json:"historyLength,omitempty" yaml:"historyLength,omitempty" mapstructure:"historyLength,omitempty"`
+
+	// The unique identifier (e.g. UUID) of the task.
+	Id string `json:"id" yaml:"id" mapstructure:"id"`
+
+	// Optional metadata associated with the request.
+	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+}
+
+type FilePartFile_0 = FileWithBytes
+
+// Represents the status of a task at a specific point in time.
+type TaskStatus struct {
+	// An optional, human-readable message providing more details about the current
+	// status.
+	Message *Message `json:"message,omitempty" yaml:"message,omitempty" mapstructure:"message,omitempty"`
+
+	// The current state of the task's lifecycle.
+	State TaskState `json:"state" yaml:"state" mapstructure:"state"`
+
+	// An ISO 8601 datetime string indicating when this status was recorded.
+	Timestamp *string `json:"timestamp,omitempty" yaml:"timestamp,omitempty" mapstructure:"timestamp,omitempty"`
+}
+
+// A discriminated union representing a part of a message or artifact, which can
+// be text, a file, or structured data.
+type Part interface{}
+
+// Defines base properties common to all message or artifact parts.
+type PartBase struct {
+	// Optional metadata associated with this part.
+	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
 }
 
 // Defines a security scheme that can be used to secure an agent's endpoints.
@@ -1055,17 +1296,8 @@ type SendMessageRequest struct {
 // Represents a JSON-RPC response for the `message/send` method.
 type SendMessageResponse interface{}
 
-// Represents a successful JSON-RPC response for the `message/send` method.
-type SendMessageSuccessResponse struct {
-	// The identifier established by the client.
-	Id interface{} `json:"id" yaml:"id" mapstructure:"id"`
-
-	// The version of the JSON-RPC protocol. MUST be exactly "2.0".
-	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
-
-	// The result, which can be a direct reply Message or the initial Task object.
-	Result SendMessageSuccessResponseResult `json:"result" yaml:"result" mapstructure:"result"`
-}
+type SendMessageSuccessResponseResult_0 = Task
+type SendMessageSuccessResponseResult_1 = Message
 
 // Represents a single, stateful operation or conversation between a client and an
 // agent.
@@ -1117,6 +1349,18 @@ type SendMessageSuccessResponseResult struct {
 	TaskId *string `json:"taskId,omitempty" yaml:"taskId,omitempty" mapstructure:"taskId,omitempty"`
 }
 
+// Represents a successful JSON-RPC response for the `message/send` method.
+type SendMessageSuccessResponse struct {
+	// The identifier established by the client.
+	Id interface{} `json:"id" yaml:"id" mapstructure:"id"`
+
+	// The version of the JSON-RPC protocol. MUST be exactly "2.0".
+	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
+
+	// The result, which can be a direct reply Message or the initial Task object.
+	Result SendMessageSuccessResponseResult `json:"result" yaml:"result" mapstructure:"result"`
+}
+
 // Represents a JSON-RPC request for the `message/stream` method.
 type SendStreamingMessageRequest struct {
 	// The identifier for this request.
@@ -1135,18 +1379,58 @@ type SendStreamingMessageRequest struct {
 // Represents a JSON-RPC response for the `message/stream` method.
 type SendStreamingMessageResponse interface{}
 
-// Represents a successful JSON-RPC response for the `message/stream` method.
-// The server may send multiple response objects for a single request.
-type SendStreamingMessageSuccessResponse struct {
-	// The identifier established by the client.
-	Id interface{} `json:"id" yaml:"id" mapstructure:"id"`
+// An event sent by the agent to notify the client of a change in a task's status.
+// This is typically used in streaming or subscription models.
+type TaskStatusUpdateEvent struct {
+	// The context ID associated with the task.
+	ContextId string `json:"contextId" yaml:"contextId" mapstructure:"contextId"`
 
-	// The version of the JSON-RPC protocol. MUST be exactly "2.0".
-	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
+	// If true, this is the final event in the stream for this interaction.
+	Final bool `json:"final" yaml:"final" mapstructure:"final"`
 
-	// The result, which can be a Message, Task, or a streaming update event.
-	Result SendStreamingMessageSuccessResponseResult `json:"result" yaml:"result" mapstructure:"result"`
+	// The type of this event, used as a discriminator. Always 'status-update'.
+	Kind string `json:"kind" yaml:"kind" mapstructure:"kind"`
+
+	// Optional metadata for extensions.
+	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+
+	// The new status of the task.
+	Status TaskStatus `json:"status" yaml:"status" mapstructure:"status"`
+
+	// The ID of the task that was updated.
+	TaskId string `json:"taskId" yaml:"taskId" mapstructure:"taskId"`
 }
+
+// An event sent by the agent to notify the client that an artifact has been
+// generated or updated. This is typically used in streaming models.
+type TaskArtifactUpdateEvent struct {
+	// If true, the content of this artifact should be appended to a previously sent
+	// artifact with the same ID.
+	Append *bool `json:"append,omitempty" yaml:"append,omitempty" mapstructure:"append,omitempty"`
+
+	// The artifact that was generated or updated.
+	Artifact Artifact `json:"artifact" yaml:"artifact" mapstructure:"artifact"`
+
+	// The context ID associated with the task.
+	ContextId string `json:"contextId" yaml:"contextId" mapstructure:"contextId"`
+
+	// The type of this event, used as a discriminator. Always 'artifact-update'.
+	Kind string `json:"kind" yaml:"kind" mapstructure:"kind"`
+
+	// If true, this is the final chunk of the artifact.
+	LastChunk *bool `json:"lastChunk,omitempty" yaml:"lastChunk,omitempty" mapstructure:"lastChunk,omitempty"`
+
+	// Optional metadata for extensions.
+	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+
+	// The ID of the task this artifact belongs to.
+	TaskId string `json:"taskId" yaml:"taskId" mapstructure:"taskId"`
+}
+
+type SendStreamingMessageSuccessResponseResult_0 = Task
+type SendStreamingMessageSuccessResponseResult_1 = Message
+type SendStreamingMessageSuccessResponseResult_2 = TaskStatusUpdateEvent
+type SendStreamingMessageSuccessResponseResult_3 = TaskArtifactUpdateEvent
 
 // Represents a single, stateful operation or conversation between a client and an
 // agent.
@@ -1211,6 +1495,19 @@ type SendStreamingMessageSuccessResponseResult struct {
 	TaskId string `json:"taskId" yaml:"taskId" mapstructure:"taskId"`
 }
 
+// Represents a successful JSON-RPC response for the `message/stream` method.
+// The server may send multiple response objects for a single request.
+type SendStreamingMessageSuccessResponse struct {
+	// The identifier established by the client.
+	Id interface{} `json:"id" yaml:"id" mapstructure:"id"`
+
+	// The version of the JSON-RPC protocol. MUST be exactly "2.0".
+	Jsonrpc string `json:"jsonrpc" yaml:"jsonrpc" mapstructure:"jsonrpc"`
+
+	// The result, which can be a Message, Task, or a streaming update event.
+	Result SendStreamingMessageSuccessResponseResult `json:"result" yaml:"result" mapstructure:"result"`
+}
+
 // Represents a JSON-RPC request for the `tasks/pushNotificationConfig/set` method.
 type SetTaskPushNotificationConfigRequest struct {
 	// The identifier for this request.
@@ -1243,120 +1540,6 @@ type SetTaskPushNotificationConfigSuccessResponse struct {
 	Result TaskPushNotificationConfig `json:"result" yaml:"result" mapstructure:"result"`
 }
 
-// Represents a single, stateful operation or conversation between a client and an
-// agent.
-type Task struct {
-	// A collection of artifacts generated by the agent during the execution of the
-	// task.
-	Artifacts []Artifact `json:"artifacts,omitempty" yaml:"artifacts,omitempty" mapstructure:"artifacts,omitempty"`
-
-	// A server-generated unique identifier (e.g. UUID) for maintaining context across
-	// multiple related tasks or interactions.
-	ContextId string `json:"contextId" yaml:"contextId" mapstructure:"contextId"`
-
-	// An array of messages exchanged during the task, representing the conversation
-	// history.
-	History []Message `json:"history,omitempty" yaml:"history,omitempty" mapstructure:"history,omitempty"`
-
-	// A unique identifier (e.g. UUID) for the task, generated by the server for a new
-	// task.
-	Id string `json:"id" yaml:"id" mapstructure:"id"`
-
-	// The type of this object, used as a discriminator. Always 'task' for a Task.
-	Kind string `json:"kind" yaml:"kind" mapstructure:"kind"`
-
-	// Optional metadata for extensions. The key is an extension-specific identifier.
-	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
-
-	// The current status of the task, including its state and a descriptive message.
-	Status TaskStatus `json:"status" yaml:"status" mapstructure:"status"`
-}
-
-// An event sent by the agent to notify the client that an artifact has been
-// generated or updated. This is typically used in streaming models.
-type TaskArtifactUpdateEvent struct {
-	// If true, the content of this artifact should be appended to a previously sent
-	// artifact with the same ID.
-	Append *bool `json:"append,omitempty" yaml:"append,omitempty" mapstructure:"append,omitempty"`
-
-	// The artifact that was generated or updated.
-	Artifact Artifact `json:"artifact" yaml:"artifact" mapstructure:"artifact"`
-
-	// The context ID associated with the task.
-	ContextId string `json:"contextId" yaml:"contextId" mapstructure:"contextId"`
-
-	// The type of this event, used as a discriminator. Always 'artifact-update'.
-	Kind string `json:"kind" yaml:"kind" mapstructure:"kind"`
-
-	// If true, this is the final chunk of the artifact.
-	LastChunk *bool `json:"lastChunk,omitempty" yaml:"lastChunk,omitempty" mapstructure:"lastChunk,omitempty"`
-
-	// Optional metadata for extensions.
-	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
-
-	// The ID of the task this artifact belongs to.
-	TaskId string `json:"taskId" yaml:"taskId" mapstructure:"taskId"`
-}
-
-// Defines parameters containing a task ID, used for simple task operations.
-type TaskIdParams struct {
-	// The unique identifier (e.g. UUID) of the task.
-	Id string `json:"id" yaml:"id" mapstructure:"id"`
-
-	// Optional metadata associated with the request.
-	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
-}
-
-// An A2A-specific error indicating that the task is in a state where it cannot be
-// canceled.
-type TaskNotCancelableError struct {
-	// The error code for a task that cannot be canceled.
-	Code int `json:"code" yaml:"code" mapstructure:"code"`
-
-	// A primitive or structured value containing additional information about the
-	// error.
-	// This may be omitted.
-	Data interface{} `json:"data,omitempty" yaml:"data,omitempty" mapstructure:"data,omitempty"`
-
-	// The error message.
-	Message string `json:"message" yaml:"message" mapstructure:"message"`
-}
-
-// An A2A-specific error indicating that the requested task ID was not found.
-type TaskNotFoundError struct {
-	// The error code for a task not found error.
-	Code int `json:"code" yaml:"code" mapstructure:"code"`
-
-	// A primitive or structured value containing additional information about the
-	// error.
-	// This may be omitted.
-	Data interface{} `json:"data,omitempty" yaml:"data,omitempty" mapstructure:"data,omitempty"`
-
-	// The error message.
-	Message string `json:"message" yaml:"message" mapstructure:"message"`
-}
-
-// A container associating a push notification configuration with a specific task.
-type TaskPushNotificationConfig struct {
-	// The push notification configuration for this task.
-	PushNotificationConfig PushNotificationConfig `json:"pushNotificationConfig" yaml:"pushNotificationConfig" mapstructure:"pushNotificationConfig"`
-
-	// The unique identifier (e.g. UUID) of the task.
-	TaskId string `json:"taskId" yaml:"taskId" mapstructure:"taskId"`
-}
-
-// Defines parameters for querying a task, with an option to limit history length.
-type TaskQueryParams struct {
-	// The number of most recent messages from the task's history to retrieve.
-	HistoryLength *int `json:"historyLength,omitempty" yaml:"historyLength,omitempty" mapstructure:"historyLength,omitempty"`
-
-	// The unique identifier (e.g. UUID) of the task.
-	Id string `json:"id" yaml:"id" mapstructure:"id"`
-
-	// Optional metadata associated with the request.
-	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
-}
-
 // Represents a JSON-RPC request for the `tasks/resubscribe` method, used to resume
 // a streaming connection.
 type TaskResubscriptionRequest struct {
@@ -1372,93 +1555,6 @@ type TaskResubscriptionRequest struct {
 	// The parameters identifying the task to resubscribe to.
 	Params TaskIdParams `json:"params" yaml:"params" mapstructure:"params"`
 }
-
-type TaskState string
-
-const TaskStateAuthRequired TaskState = "auth-required"
-const TaskStateCanceled TaskState = "canceled"
-const TaskStateCompleted TaskState = "completed"
-const TaskStateFailed TaskState = "failed"
-const TaskStateInputRequired TaskState = "input-required"
-const TaskStateRejected TaskState = "rejected"
-const TaskStateSubmitted TaskState = "submitted"
-const TaskStateUnknown TaskState = "unknown"
-const TaskStateWorking TaskState = "working"
-
-// Represents the status of a task at a specific point in time.
-type TaskStatus struct {
-	// An optional, human-readable message providing more details about the current
-	// status.
-	Message *Message `json:"message,omitempty" yaml:"message,omitempty" mapstructure:"message,omitempty"`
-
-	// The current state of the task's lifecycle.
-	State TaskState `json:"state" yaml:"state" mapstructure:"state"`
-
-	// An ISO 8601 datetime string indicating when this status was recorded.
-	Timestamp *string `json:"timestamp,omitempty" yaml:"timestamp,omitempty" mapstructure:"timestamp,omitempty"`
-}
-
-type JSONRPCErrorResponseError_10 = ContentTypeNotSupportedError
-type JSONRPCErrorResponseError_3 = MethodNotFoundError
-type JSONRPCErrorResponseError_0 = JSONRPCError
-type FilePartFile_0 = FileWithBytes
-type FilePartFile_1 = FileWithUri
-type GetTaskPushNotificationConfigRequestParams_0 = TaskIdParams
-type JSONRPCErrorResponseError_1 = JSONParseError
-type SendMessageSuccessResponseResult_0 = Task
-type SendMessageSuccessResponseResult_1 = Message
-type GetTaskPushNotificationConfigRequestParams_1 = GetTaskPushNotificationConfigParams
-type JSONRPCErrorResponseError_2 = InvalidRequestError
-type JSONRPCErrorResponseError_12 = AuthenticatedExtendedCardNotConfiguredError
-type JSONRPCErrorResponseError_11 = InvalidAgentResponseError
-
-// An event sent by the agent to notify the client of a change in a task's status.
-// This is typically used in streaming or subscription models.
-type TaskStatusUpdateEvent struct {
-	// The context ID associated with the task.
-	ContextId string `json:"contextId" yaml:"contextId" mapstructure:"contextId"`
-
-	// If true, this is the final event in the stream for this interaction.
-	Final bool `json:"final" yaml:"final" mapstructure:"final"`
-
-	// The type of this event, used as a discriminator. Always 'status-update'.
-	Kind string `json:"kind" yaml:"kind" mapstructure:"kind"`
-
-	// Optional metadata for extensions.
-	Metadata map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty" mapstructure:"metadata,omitempty"`
-
-	// The new status of the task.
-	Status TaskStatus `json:"status" yaml:"status" mapstructure:"status"`
-
-	// The ID of the task that was updated.
-	TaskId string `json:"taskId" yaml:"taskId" mapstructure:"taskId"`
-}
-
-// An A2A-specific error indicating that the requested operation is not supported
-// by the agent.
-type UnsupportedOperationError struct {
-	// The error code for an unsupported operation.
-	Code int `json:"code" yaml:"code" mapstructure:"code"`
-
-	// A primitive or structured value containing additional information about the
-	// error.
-	// This may be omitted.
-	Data interface{} `json:"data,omitempty" yaml:"data,omitempty" mapstructure:"data,omitempty"`
-
-	// The error message.
-	Message string `json:"message" yaml:"message" mapstructure:"message"`
-}
-
-type SendStreamingMessageSuccessResponseResult_0 = Task
-type SendStreamingMessageSuccessResponseResult_1 = Message
-type SendStreamingMessageSuccessResponseResult_2 = TaskStatusUpdateEvent
-type SendStreamingMessageSuccessResponseResult_3 = TaskArtifactUpdateEvent
-type JSONRPCErrorResponseError_9 = UnsupportedOperationError
-type JSONRPCErrorResponseError_8 = PushNotificationNotSupportedError
-type JSONRPCErrorResponseError_7 = TaskNotCancelableError
-type JSONRPCErrorResponseError_6 = TaskNotFoundError
-type JSONRPCErrorResponseError_5 = InternalError
-type JSONRPCErrorResponseError_4 = InvalidParamsError
 
 // Represents a text segment within a message or artifact.
 type TextPart struct {

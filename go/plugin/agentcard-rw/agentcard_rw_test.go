@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
+	"github.com/stretchr/testify/assert"
 )
 
 // Test constants
@@ -49,19 +50,19 @@ func (h *testHelper) makeRequest(handler http.Handler, method, path, host, proto
 
 func (h *testHelper) createAgentCardBackend(card models.AgentCard) http.HandlerFunc {
 	cardJSON, _ := json.Marshal(card)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", contentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(cardJSON)
-	})
+	}
 }
 
 func (h *testHelper) createJSONBackend(jsonData string) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", contentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(jsonData))
-	})
+	}
 }
 
 // TestPluginRegistration verifies the plugin can be registered
@@ -234,46 +235,52 @@ func TestAgentCardInterception(t *testing.T) {
 // TestErrorConditionsPassThrough verifies various error conditions cause plugin to return early
 func TestErrorConditionsPassThrough(t *testing.T) {
 	tests := []struct {
-		name        string
-		statusCode  int
-		contentType string
-		body        string
-		description string
+		name               string
+		statusCode         int
+		contentType        string
+		body               string
+		description        string
+		expectedStatusCode int
 	}{
 		{
-			name:        "404 Not Found",
-			statusCode:  http.StatusNotFound,
-			contentType: contentTypeJSON,
-			body:        "not found",
-			description: "non-OK status codes",
+			name:               "404 Not Found",
+			statusCode:         http.StatusNotFound,
+			contentType:        contentTypeJSON,
+			body:               "not found",
+			description:        "non-OK status codes",
+			expectedStatusCode: http.StatusNotFound,
 		},
 		{
-			name:        "500 Internal Server Error",
-			statusCode:  http.StatusInternalServerError,
-			contentType: contentTypeJSON,
-			body:        "internal error",
-			description: "non-OK status codes",
+			name:               "500 Internal Server Error",
+			statusCode:         http.StatusInternalServerError,
+			contentType:        contentTypeJSON,
+			body:               "internal error",
+			description:        "non-OK status codes",
+			expectedStatusCode: http.StatusInternalServerError,
 		},
 		{
-			name:        "403 Forbidden",
-			statusCode:  http.StatusForbidden,
-			contentType: contentTypeJSON,
-			body:        "forbidden",
-			description: "non-OK status codes",
+			name:               "403 Forbidden",
+			statusCode:         http.StatusForbidden,
+			contentType:        contentTypeJSON,
+			body:               "forbidden",
+			description:        "non-OK status codes",
+			expectedStatusCode: http.StatusForbidden,
 		},
 		{
-			name:        "Malformed JSON",
-			statusCode:  http.StatusOK,
-			contentType: contentTypeJSON,
-			body:        `{"invalid": json}`,
-			description: "malformed JSON",
+			name:               "Malformed JSON",
+			statusCode:         http.StatusOK,
+			contentType:        contentTypeJSON,
+			body:               `{"invalid": json}`,
+			description:        "malformed JSON",
+			expectedStatusCode: http.StatusInternalServerError,
 		},
 		{
-			name:        "Non-JSON Content Type",
-			statusCode:  http.StatusOK,
-			contentType: "text/html",
-			body:        "<html><body>Not JSON</body></html>",
-			description: "non-JSON content types",
+			name:               "Non-JSON Content Type",
+			statusCode:         http.StatusOK,
+			contentType:        "text/html",
+			body:               "<html><body>Not JSON</body></html>",
+			description:        "non-JSON content types",
+			expectedStatusCode: http.StatusUnsupportedMediaType,
 		},
 	}
 
@@ -292,24 +299,8 @@ func TestErrorConditionsPassThrough(t *testing.T) {
 			handler := helper.createPluginHandler(backend)
 			rec := helper.makeRequest(handler, http.MethodGet, "/test-agent"+testAgentCardPath, testGatewayHost, testHTTPSProtocol)
 
-			// Plugin returns http.Error for error conditions
-			// Verify appropriate error status code is returned
-			if rec.Code != tt.statusCode && tt.statusCode != http.StatusOK {
-				// For non-OK backend status, plugin should return the same status with error message
-				if rec.Code != tt.statusCode {
-					t.Errorf("status code = %d, want %d", rec.Code, tt.statusCode)
-				}
-			} else if tt.statusCode == http.StatusOK {
-				// For OK status with bad content, plugin should return 500
-				if rec.Code != http.StatusInternalServerError {
-					t.Errorf("status code = %d, want %d", rec.Code, http.StatusInternalServerError)
-				}
-			}
-
-			// Verify error message is present
-			if rec.Body.Len() == 0 {
-				t.Error("expected error message in response body")
-			}
+			assert.Equal(t, tt.expectedStatusCode, rec.Code)
+			assert.NotEmpty(t, rec.Body)
 		})
 	}
 }
@@ -498,5 +489,106 @@ func TestUnknownFieldPreservation(t *testing.T) {
 				t.Errorf("interface[1] transport = %v, want 'grpc'", iface["transport"])
 			}
 		}
+	}
+}
+
+func TestGetGatewayURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		host        string
+		proto       string
+		expected    string
+		expectError bool
+	}{
+		{
+			name:        "https with explicit proto header",
+			host:        "gateway.agentic-layer.ai",
+			proto:       "https",
+			expected:    "https://gateway.agentic-layer.ai",
+			expectError: false,
+		},
+		{
+			name:        "default https without proto header",
+			host:        "gateway.agentic-layer.ai",
+			proto:       "",
+			expected:    "http://gateway.agentic-layer.ai",
+			expectError: false,
+		},
+		{
+			name:        "http proto header with localhost",
+			host:        "localhost:10000",
+			proto:       "http",
+			expected:    "http://localhost:10000",
+			expectError: false,
+		},
+		{
+			name:        "internal cluster host uses Host header",
+			host:        "agent-gateway.default.svc.cluster.local",
+			proto:       "https",
+			expected:    "https://agent-gateway.default.svc.cluster.local",
+			expectError: false,
+		},
+		{
+			name:        "empty host should error",
+			host:        "",
+			proto:       "https",
+			expected:    "",
+			expectError: true,
+		},
+		{
+			name:        "host with port",
+			host:        "gateway.agentic-layer.ai:443",
+			proto:       "https",
+			expected:    "https://gateway.agentic-layer.ai:443",
+			expectError: false,
+		},
+		{
+			name:        "internal cluster variant with port",
+			host:        "service.namespace.svc.cluster.local:8080",
+			proto:       "http",
+			expected:    "http://service.namespace.svc.cluster.local:8080",
+			expectError: false,
+		},
+		{
+			name:        "external gateway host",
+			host:        "gateway-from-header.example.com",
+			proto:       "https",
+			expected:    "https://gateway-from-header.example.com",
+			expectError: false,
+		},
+		{
+			name:        "docker internal hostname",
+			host:        "host.docker.internal",
+			proto:       "http",
+			expected:    "http://host.docker.internal",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &http.Request{
+				Host:   tt.host,
+				Header: http.Header{},
+			}
+			if tt.proto != "" {
+				req.Header.Set("X-Forwarded-Proto", tt.proto)
+			}
+
+			result, err := getGatewayURL(req)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("getGatewayURL() expected error but got none, result = %q", result)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("getGatewayURL() unexpected error: %v", err)
+				}
+				if result != tt.expected {
+					t.Errorf("getGatewayURL() = %q, want %q", result, tt.expected)
+				}
+			}
+		})
 	}
 }

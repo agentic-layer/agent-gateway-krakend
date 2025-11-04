@@ -1,0 +1,17 @@
+services:
+  agent-gateway-krakend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: agent-gateway-krakend
+    ports:
+      - "10000:10000"
+    volumes:
+      - ./local/krakend.json:/etc/krakend/krakend.json:ro
+
+  mock-agent:
+    image: ghcr.io/agentic-layer/mock-agent:0.5
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./local/wiremock:/home/wiremock/mappings:ro

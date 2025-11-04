@@ -88,7 +88,7 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 
 		// Check if this is a POST request to a chat completions endpoint
 		if req.Method == http.MethodPost && isChatCompletionsEndpoint(req.URL.Path, cfg.Endpoint) {
-			reqLogger.Info("intercepted OpenAI chat completions request: %s", req.URL.Path)
+			reqLogger.Debug("intercepted OpenAI chat completions request: %s", req.URL.Path)
 
 			// Extract the path prefix (agent name)
 			pathPrefix := extractPathPrefix(req.URL.Path, cfg.Endpoint)
@@ -129,7 +129,7 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 				return
 			}
 
-			reqLogger.Info("transformed OpenAI request to A2A format, forwarding to: /%s", pathPrefix)
+			reqLogger.Debug("transformed OpenAI request to A2A format, forwarding to: /%s", pathPrefix)
 
 			// Create new request to backend
 			req.Body = io.NopCloser(bytes.NewReader(a2aBody))
@@ -167,7 +167,7 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 				return
 			}
 
-			reqLogger.Info("transformed A2A response back to OpenAI format")
+			reqLogger.Debug("transformed A2A response back to OpenAI format")
 
 			// Write the transformed response
 			w.Header().Set(headers.ContentType, "application/json")

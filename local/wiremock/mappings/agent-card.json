@@ -21,10 +21,6 @@
         {"transport": "HTTP+JSON", "url": "http://10.96.1.50:8443"},
         {"transport": "grpc", "url": "http://mock-agent.default.svc.cluster.local:9090"}
       ],
-      "provider": {
-        "name": "Test Provider",
-        "url": "https://test-provider.example.com"
-      },
       "version": "0.0.1"
     }
   }

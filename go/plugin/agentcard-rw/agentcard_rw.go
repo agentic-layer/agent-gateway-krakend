@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -106,7 +107,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			contentType := rw.Header().Get("Content-Type")
 			if !strings.Contains(contentType, "application/json") {
 				reqLogger.Warn("unexpected content-type: %s - returning error", contentType)
-				http.Error(w, "Expected application/json content type", http.StatusInternalServerError)
+				http.Error(w, "Expected application/json content type", http.StatusUnsupportedMediaType)
 				return
 			}
 
@@ -144,4 +145,20 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 		// Not an agent card endpoint, pass through
 		handler.ServeHTTP(w, req)
 	}
+}
+
+// getGatewayURL extracts the gateway URL from request headers
+// Returns the full URL scheme + host, or an error if Host header is missing
+func getGatewayURL(req *http.Request) (string, error) {
+	host := req.Host
+
+	// Default to http, but check X-Forwarded-Proto header
+	var scheme string
+	if proto := req.Header.Get("X-Forwarded-Proto"); proto != "" {
+		scheme = proto
+	} else {
+		scheme = "http"
+	}
+
+	return fmt.Sprintf("%s://%s", scheme, host), nil
 }
