@@ -1,7 +1,7 @@
 ARG KRAKENX_VERSION=2.11.0
 
 # NOTE: golang version must match exactly the one in https://github.com/devopsfaith/krakend-ce/blob/v2.10.1/Makefile
-FROM golang:1.25.1-trixie AS builder
+FROM golang:1.25.4-trixie AS builder
 ARG KRAKENX_VERSION
 
 RUN apt-get update && \
