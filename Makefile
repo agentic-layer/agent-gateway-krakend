@@ -20,4 +20,4 @@ test:
 
 .PHONY: image
 image:
-	docker build --tag agent-gateway-krakend .
+	docker build --tag ghcr.io/agentic-layer/agent-gateway-krakend:test .

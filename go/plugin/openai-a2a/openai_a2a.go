@@ -113,8 +113,16 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 				return
 			}
 
+			conversionId := req.Header.Get("X-Conversation-ID")
+			if conversionId == "" {
+				reqLogger.Warn("no X-Conversation-ID header found, generating new conversation ID")
+				conversionId = uuid.New().String()
+			} else {
+				reqLogger.Debug("using conversation ID from header: %s", conversionId)
+			}
+
 			// Transform to A2A format
-			a2aReq, err := transformOpenAIToA2A(openAIReq)
+			a2aReq, err := transformOpenAIToA2A(openAIReq, conversionId)
 			if err != nil {
 				reqLogger.Error("failed to transform OpenAI request: %s", err)
 				http.Error(w, "invalid OpenAI request", http.StatusBadRequest)
@@ -282,8 +290,8 @@ func transformA2AToOpenAI(a2aResp models.SendMessageSuccessResponse, originalReq
 }
 
 // transformOpenAIToA2A converts OpenAI chat completion request to A2A format
-func transformOpenAIToA2A(openAIReq models.OpenAIRequest) (*models.SendMessageRequest, error) {
-	contextID := uuid.New().String()
+func transformOpenAIToA2A(openAIReq models.OpenAIRequest, conversionId string) (*models.SendMessageRequest, error) {
+	contextID := conversionId
 	messageID := uuid.New().String()
 
 	numMessages := len(openAIReq.Messages)
@@ -313,10 +321,8 @@ func transformOpenAIToA2A(openAIReq models.OpenAIRequest) (*models.SendMessageRe
 		Id:      1,
 		Method:  "message/send",
 		Params: models.MessageSendParams{
-			Message: message,
-			Metadata: map[string]interface{}{
-				"conversationId": contextID,
-			},
+			Message:  message,
+			Metadata: map[string]interface{}{},
 		},
 	}
 

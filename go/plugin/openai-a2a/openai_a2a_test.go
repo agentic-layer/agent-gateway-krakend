@@ -396,7 +396,7 @@ func Test_transformOpenAIToA2A(t *testing.T) {
 		Temperature: 0.7,
 	}
 
-	a2aReq, err := transformOpenAIToA2A(openAIReq)
+	a2aReq, err := transformOpenAIToA2A(openAIReq, "conversionId")
 
 	assert.Nil(t, err)
 	assert.Equal(t, "2.0", a2aReq.Jsonrpc)
@@ -421,7 +421,7 @@ func Test_transformOpenAIToA2A_WithMultipleMessages(t *testing.T) {
 		},
 	}
 
-	a2aReq, err := transformOpenAIToA2A(openAIReq)
+	a2aReq, err := transformOpenAIToA2A(openAIReq, "conversionId")
 
 	assert.Nil(t, err)
 
