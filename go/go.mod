@@ -29,7 +29,7 @@ require (
 )
 
 // must match the latest version in https://github.com/devopsfaith/krakend-ce/blob/v2.10.1/go.sum
-replace golang.org/x/sys => golang.org/x/sys v0.31.0
+replace golang.org/x/sys => golang.org/x/sys v0.38.0
 
 replace go.opentelemetry.io/otel => go.opentelemetry.io/otel v1.33.0
 
