@@ -35,7 +35,7 @@ replace go.opentelemetry.io/otel => go.opentelemetry.io/otel v1.33.0
 
 replace go.opentelemetry.io/auto/sdk => go.opentelemetry.io/auto/sdk v1.2.1
 
-replace go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0
+replace go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0
 
 replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v1.33.0
 
