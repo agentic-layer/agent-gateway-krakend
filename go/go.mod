@@ -31,12 +31,12 @@ require (
 // must match the latest version in https://github.com/devopsfaith/krakend-ce/blob/v2.10.1/go.sum
 replace golang.org/x/sys => golang.org/x/sys v0.38.0
 
-replace go.opentelemetry.io/otel => go.opentelemetry.io/otel v1.33.0
+replace go.opentelemetry.io/otel => go.opentelemetry.io/otel v1.38.0
 
 replace go.opentelemetry.io/auto/sdk => go.opentelemetry.io/auto/sdk v1.2.1
 
 replace go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0
 
-replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v1.33.0
+replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v1.38.0
 
-replace go.opentelemetry.io/otel/trace => go.opentelemetry.io/otel/trace v1.33.0
+replace go.opentelemetry.io/otel/trace => go.opentelemetry.io/otel/trace v1.38.0
