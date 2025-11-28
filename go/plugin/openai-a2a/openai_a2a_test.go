@@ -627,3 +627,49 @@ func Test_transformA2AToOpenAI_SkipsNonTextParts(t *testing.T) {
 
 	assert.Equal(t, "Visible text", openAIResp.Choices[0].Message.Content)
 }
+
+// PAAL-223: Test that streaming requests are rejected with a clear error message
+func TestStreamingRequestReturnsError(t *testing.T) {
+	var extraConfig map[string]interface{}
+	json.Unmarshal([]byte(configStr), &extraConfig)
+
+	mockHandler := &MockHandler{}
+
+	handlers, _ := HandlerRegisterer.registerHandlers(context.Background(), extraConfig, mockHandler)
+	ts := httptest.NewUnstartedServer(handlers)
+	ts.Start()
+	defer ts.Close()
+
+	openAIRequest := models.OpenAIRequest{
+		Model: "gpt-4",
+		Messages: []models.OpenAIMessage{
+			{Role: "user", Content: "Hello"},
+		},
+		Stream: true, // Enable streaming
+	}
+	reqBody, _ := json.Marshal(openAIRequest)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/agent/chat/completions", bytes.NewBuffer(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+
+	resp, err := client.Do(req)
+
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	// Verify error response format
+	var errorResp map[string]interface{}
+	respBody, _ := io.ReadAll(resp.Body)
+	err = json.Unmarshal(respBody, &errorResp)
+	assert.NoError(t, err)
+
+	// Check error structure matches OpenAI format
+	assert.Contains(t, errorResp, "error")
+	errorObj := errorResp["error"].(map[string]interface{})
+	assert.Equal(t, "Streaming is not currently supported by the Agent Gateway", errorObj["message"])
+	assert.Equal(t, "invalid_request_error", errorObj["type"])
+
+	// Verify backend was not called
+	assert.Nil(t, mockHandler.ReceivedRequest)
+}
