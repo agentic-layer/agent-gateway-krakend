@@ -113,6 +113,23 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 				return
 			}
 
+			if openAIReq.Stream {
+				reqLogger.Warn("streaming request detected, returning error (streaming not supported)")
+				errorResponse := map[string]interface{}{
+					"error": map[string]interface{}{
+						"message": "Streaming is not currently supported by the Agent Gateway",
+						"type":    "invalid_request_error",
+						"code":    nil,
+					},
+				}
+				w.Header().Set(headers.ContentType, "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				if err := json.NewEncoder(w).Encode(errorResponse); err != nil {
+					reqLogger.Error("failed to write response: %s", err)
+				}
+				return
+			}
+
 			conversionId := req.Header.Get("X-Conversation-ID")
 			if conversionId == "" {
 				reqLogger.Warn("no X-Conversation-ID header found, generating new conversation ID")
