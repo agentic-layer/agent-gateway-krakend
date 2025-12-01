@@ -8,6 +8,7 @@ The OpenAI to A2A plugin provides OpenAI-compatible chat completion endpoints th
 - Transforms OpenAI chat completion format to A2A JSON-RPC 2.0 format
 - Routes transformed requests to the corresponding agent endpoint at `/{path}`
 - Automatically generates required A2A fields (messageId, contextId)
+- Supports optional `X-Conversation-ID` header for conversation continuity
 - Preserves authentication and other headers
 
 ### Request Flow
@@ -53,9 +54,7 @@ Client → /{agent-name}/chat/completions (OpenAI format)
       "messageId": "9229e770-767c-417b-a0b0-f0741243c589",
       "contextId": "abcd1234-5678-90ab-cdef-1234567890ab"
     },
-    "metadata": {
-      "conversationId": "abcd1234-5678-90ab-cdef-1234567890ab"
-    }
+    "metadata": {}
   }
 }
 ```
@@ -84,6 +83,7 @@ The endpoint suffix is `/chat/completions` by default, but can be configured:
 ```bash
 curl http://localhost:10000/mock-agent/chat/completions \
   -H "Content-Type: application/json" \
+  -H "X-Conversation-ID: abcd1234-5678-90ab-cdef-1234567890ab" \
   -d '{
     "model": "gpt-4",
     "messages": [
@@ -94,6 +94,15 @@ curl http://localhost:10000/mock-agent/chat/completions \
     ]
   }'
 ```
+
+### Conversation ID Management
+
+The plugin supports conversation continuity through the `X-Conversation-ID` header:
+
+- **With header**: When the `X-Conversation-ID` header is provided, its value is used as the `contextId` in the A2A message, enabling conversation continuity across multiple requests
+- **Without header**: If no header is provided, a new UUID is automatically generated for the `contextId`, and a warning is logged
+
+This allows clients to maintain conversation context by sending the same conversation ID across related requests.
 
 ### Message Handling
 
