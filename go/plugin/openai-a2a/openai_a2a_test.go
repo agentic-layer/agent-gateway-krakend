@@ -396,7 +396,7 @@ func Test_transformOpenAIToA2A(t *testing.T) {
 		Temperature: 0.7,
 	}
 
-	a2aReq, err := transformOpenAIToA2A(openAIReq, "conversionId")
+	a2aReq, err := transformOpenAIToA2A(openAIReq, "some-conversation-id")
 
 	assert.Nil(t, err)
 	assert.Equal(t, "2.0", a2aReq.Jsonrpc)
@@ -404,6 +404,8 @@ func Test_transformOpenAIToA2A(t *testing.T) {
 	assert.Equal(t, "message/send", a2aReq.Method)
 	assert.Equal(t, "message", a2aReq.Params.Message.Kind)
 	assert.Equal(t, 1, len(a2aReq.Params.Message.Parts))
+	assert.NotNil(t, a2aReq.Params.Message.ContextId)
+	assert.Equal(t, "some-conversation-id", *a2aReq.Params.Message.ContextId)
 
 	textPart := a2aReq.Params.Message.Parts[0].(models.TextPart)
 	assert.Equal(t, "text", textPart.Kind)
@@ -421,7 +423,7 @@ func Test_transformOpenAIToA2A_WithMultipleMessages(t *testing.T) {
 		},
 	}
 
-	a2aReq, err := transformOpenAIToA2A(openAIReq, "conversionId")
+	a2aReq, err := transformOpenAIToA2A(openAIReq, "some-conversation-id")
 
 	assert.Nil(t, err)
 
@@ -429,6 +431,8 @@ func Test_transformOpenAIToA2A_WithMultipleMessages(t *testing.T) {
 	assert.Equal(t, "message", a2aReq.Params.Message.Kind)
 	textPart := a2aReq.Params.Message.Parts[0].(models.TextPart)
 	assert.Equal(t, "What about tomorrow?", textPart.Text)
+	assert.NotNil(t, a2aReq.Params.Message.ContextId)
+	assert.Equal(t, "some-conversation-id", *a2aReq.Params.Message.ContextId)
 
 	assert.NotNil(t, a2aReq.Params.Message.ContextId)
 }
