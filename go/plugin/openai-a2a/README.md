@@ -4,19 +4,20 @@ The OpenAI to A2A plugin provides OpenAI-compatible chat completion endpoints th
 
 ### Features
 
-- Intercepts requests at `/{path}/chat/completions` endpoints
-- Transforms OpenAI chat completion format to A2A JSON-RPC 2.0 format
-- Routes transformed requests to the corresponding agent endpoint at `/{path}`
-- Automatically generates required A2A fields (messageId, contextId)
-- Supports optional `X-Conversation-ID` header for conversation continuity
-- Preserves authentication and other headers
+- **Global `/chat/completions` endpoint**: Single endpoint for all agents using model-based routing
+- **`/models` endpoint**: List all available agents as OpenAI-compatible models
+- **Protocol transformation**: Converts OpenAI format to A2A JSON-RPC 2.0 format
+- **Dynamic routing**: Routes requests to agents based on the `model` parameter
+- **Auto-generation**: Automatically generates required A2A fields (messageId, contextId)
+- **Flexible identifiers**: Supports any model ID format provided by configuration
+- **Conversation continuity**: Supports optional `X-Conversation-ID` header for maintaining context across requests
 
 ### Request Flow
 
 ```
-Client → /{agent-name}/chat/completions (OpenAI format)
-         ↓ Plugin transformation
-         → /{agent-name} (A2A JSON-RPC format)
+Client → /chat/completions (OpenAI format)
+         ↓ Plugin parses model parameter and resolves agent
+         → /{model-id} (A2A JSON-RPC format)
          → Agent Backend
 ```
 
@@ -24,7 +25,7 @@ Client → /{agent-name}/chat/completions (OpenAI format)
 
 ```json
 {
-  "model": "gpt-4",
+  "model": "default/weather-agent",
   "messages": [
     {
       "role": "user",
@@ -61,7 +62,7 @@ Client → /{agent-name}/chat/completions (OpenAI format)
 
 ### Configuration
 
-The endpoint suffix is `/chat/completions` by default, but can be configured:
+The plugin is configured via `openai_a2a_config` in the KrakenD configuration. The agents list is populated by the configuration manager (e.g., the Kubernetes operator in a K8s deployment).
 
 ```json
 {
@@ -71,7 +72,14 @@ The endpoint suffix is `/chat/completions` by default, but can be configured:
         "openai-a2a"
       ],
       "openai_a2a_config": {
-        "endpoint": "/chat/completion"
+        "agents": [
+          {
+            "model_id": "default/weather-agent",
+            "url": "http://weather-agent:8000",
+            "owned_by": "default",
+            "createdAt": 1731679815
+          }
+        ]
       }
     }
   }
@@ -80,12 +88,35 @@ The endpoint suffix is `/chat/completions` by default, but can be configured:
 
 ### Example Usage
 
+#### List Available Models
+
 ```bash
-curl http://localhost:10000/mock-agent/chat/completions \
+curl http://localhost:10000/models
+```
+
+Response:
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "local/mock-agent",
+      "object": "model",
+      "created": 1731679815,
+      "owned_by": "local"
+    }
+  ]
+}
+```
+
+#### Send Chat Completion Request
+
+```bash
+curl http://localhost:10000/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-Conversation-ID: abcd1234-5678-90ab-cdef-1234567890ab" \
   -d '{
-    "model": "gpt-4",
+    "model": "local/mock-agent",
     "messages": [
       {
         "role": "user",
@@ -94,6 +125,10 @@ curl http://localhost:10000/mock-agent/chat/completions \
     ]
   }'
 ```
+
+**Model Parameter:**
+
+The `model` field specifies which agent to route to. Model ID format is determined by your gateway configuration.
 
 ### Conversation ID Management
 
