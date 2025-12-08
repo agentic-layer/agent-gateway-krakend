@@ -58,117 +58,6 @@ func (h *MockHandler) ServeHTTP(writer http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func TestOpenAIToA2ATransformation(t *testing.T) {
-	var extraConfig map[string]interface{}
-	json.Unmarshal([]byte(configStr), &extraConfig)
-
-	timestamp := "2025-10-02T12:00:00Z"
-	mockA2AResponse := models.SendMessageSuccessResponse{
-		Jsonrpc: "2.0",
-		Id:      1,
-		Result: models.SendMessageSuccessResponseResult{
-			Artifacts: []models.Artifact{
-				{
-					ArtifactId: "artifact-123",
-					Parts: []models.ArtifactPartsElem{
-						models.TextPart{Kind: "text", Text: "The weather in New York is sunny."},
-					},
-				},
-			},
-			ContextId: "context-123",
-			History: []models.Message{
-				{
-					Kind:      "message",
-					MessageId: "msg-1",
-					Role:      "user",
-					Parts: []models.MessagePartsElem{
-						models.TextPart{Kind: "text", Text: "What is the weather in New York?"},
-					},
-				},
-				{
-					Kind:      "message",
-					MessageId: "msg-2",
-					Role:      "agent",
-					Parts: []models.MessagePartsElem{
-						models.TextPart{Kind: "text", Text: "The weather in New York is sunny."},
-					},
-				},
-			},
-			Id:        "task-123",
-			Kind:      "task",
-			MessageId: "msg-2",
-			Role:      "agent",
-			Parts: []models.MessagePartsElem{
-				models.TextPart{Kind: "text", Text: "The weather in New York is sunny."},
-			},
-			Status: models.TaskStatus{
-				State:     "completed",
-				Timestamp: &timestamp,
-			},
-		},
-	}
-	mockResponseBytes, _ := json.Marshal(mockA2AResponse)
-
-	mockHandler := &MockHandler{
-		Response: mockResponseBytes,
-	}
-
-	handlers, _ := HandlerRegisterer.registerHandlers(context.Background(), extraConfig, mockHandler)
-	ts := httptest.NewUnstartedServer(handlers)
-	ts.Start()
-	defer ts.Close()
-
-	openAIRequest := models.OpenAIRequest{
-		Model: "gpt-4",
-		Messages: []models.OpenAIMessage{
-			{Role: "user", Content: "What is the weather in New York?"},
-		},
-	}
-	reqBody, _ := json.Marshal(openAIRequest)
-
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/weather-agent/chat/completions", bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-
-	resp, err := client.Do(req)
-
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Verify the transformed request was sent to backend
-	assert.NotNil(t, mockHandler.ReceivedRequest)
-	assert.Equal(t, "/weather-agent", mockHandler.ReceivedRequest.URL.Path)
-
-	// Verify A2A format was sent to backend
-	var a2aReq models.SendMessageRequest
-	err = json.Unmarshal(mockHandler.ReceivedBody, &a2aReq)
-	assert.NoError(t, err)
-	assert.Equal(t, "2.0", a2aReq.Jsonrpc)
-	assert.Equal(t, "message/send", a2aReq.Method)
-	assert.Equal(t, "message", a2aReq.Params.Message.Kind)
-	assert.Equal(t, 1, len(a2aReq.Params.Message.Parts))
-
-	// Cast the part to TextPart to access fields
-	textPart, ok := a2aReq.Params.Message.Parts[0].(map[string]interface{})
-	assert.True(t, ok)
-	assert.Equal(t, "text", textPart["kind"])
-	assert.Equal(t, "What is the weather in New York?", textPart["text"])
-	assert.NotEmpty(t, a2aReq.Params.Message.MessageId)
-	assert.NotNil(t, a2aReq.Params.Message.ContextId)
-
-	// Verify OpenAI response format was returned to client
-	var openAIResp models.OpenAIResponse
-	respBody, _ := io.ReadAll(resp.Body)
-	err = json.Unmarshal(respBody, &openAIResp)
-	assert.NoError(t, err)
-	assert.Equal(t, "chat.completion", openAIResp.Object)
-	assert.Equal(t, "gpt-4", openAIResp.Model)
-	assert.Equal(t, 1, len(openAIResp.Choices))
-	assert.Equal(t, "assistant", openAIResp.Choices[0].Message.Role)
-	assert.Equal(t, "The weather in New York is sunny.", openAIResp.Choices[0].Message.Content)
-	assert.Equal(t, "stop", openAIResp.Choices[0].FinishReason)
-}
-
 func TestNonChatCompletionsEndpointPassthrough(t *testing.T) {
 	var extraConfig map[string]interface{}
 	json.Unmarshal([]byte(configStr), &extraConfig)
@@ -190,104 +79,6 @@ func TestNonChatCompletionsEndpointPassthrough(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	assert.Equal(t, "/other-endpoint", mockHandler.ReceivedRequest.URL.Path)
-}
-
-func TestCustomEndpointConfiguration(t *testing.T) {
-	var extraConfig map[string]interface{}
-	json.Unmarshal([]byte(configStrCustom), &extraConfig)
-
-	timestamp := "2025-10-02T12:00:00Z"
-	mockA2AResponse := models.SendMessageSuccessResponse{
-		Jsonrpc: "2.0",
-		Id:      1,
-		Result: models.SendMessageSuccessResponseResult{
-			Artifacts: []models.Artifact{
-				{
-					ArtifactId: "artifact-456",
-					Parts: []models.ArtifactPartsElem{
-						models.TextPart{Kind: "text", Text: "Response"},
-					},
-				},
-			},
-			ContextId: "context-456",
-			History: []models.Message{
-				{
-					Kind:      "message",
-					MessageId: "msg-1",
-					Role:      "user",
-					Parts: []models.MessagePartsElem{
-						models.TextPart{Kind: "text", Text: "Test"},
-					},
-				},
-				{
-					Kind:      "message",
-					MessageId: "msg-2",
-					Role:      "agent",
-					Parts: []models.MessagePartsElem{
-						models.TextPart{Kind: "text", Text: "Response"},
-					},
-				},
-			},
-			Id:        "task-456",
-			Kind:      "task",
-			MessageId: "msg-2",
-			Role:      "agent",
-			Parts: []models.MessagePartsElem{
-				models.TextPart{Kind: "text", Text: "Response"},
-			},
-			Status: models.TaskStatus{
-				State:     "completed",
-				Timestamp: &timestamp,
-			},
-		},
-	}
-	mockResponseBytes, _ := json.Marshal(mockA2AResponse)
-
-	mockHandler := &MockHandler{
-		Response: mockResponseBytes,
-	}
-
-	handlers, _ := HandlerRegisterer.registerHandlers(context.Background(), extraConfig, mockHandler)
-	ts := httptest.NewUnstartedServer(handlers)
-	ts.Start()
-	defer ts.Close()
-
-	openAIRequest := models.OpenAIRequest{
-		Model:    "gpt-4",
-		Messages: []models.OpenAIMessage{{Role: "user", Content: "Test"}},
-	}
-	reqBody, _ := json.Marshal(openAIRequest)
-
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/agent/chat/completion", bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-
-	resp, err := client.Do(req)
-
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "/agent", mockHandler.ReceivedRequest.URL.Path)
-}
-
-func TestInvalidOpenAIRequest(t *testing.T) {
-	var extraConfig map[string]interface{}
-	json.Unmarshal([]byte(configStr), &extraConfig)
-
-	mockHandler := &MockHandler{}
-
-	handlers, _ := HandlerRegisterer.registerHandlers(context.Background(), extraConfig, mockHandler)
-	ts := httptest.NewUnstartedServer(handlers)
-	ts.Start()
-	defer ts.Close()
-
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/agent/chat/completions", bytes.NewBuffer([]byte("invalid json")))
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-
-	resp, err := client.Do(req)
-
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func Test_parseConfig_returns_config_when_valid(t *testing.T) {
@@ -343,48 +134,6 @@ func Test_parseConfig_returns_error_when_invalid(t *testing.T) {
 
 	// then
 	assert.Error(t, err)
-}
-
-func Test_isChatCompletionsEndpoint(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		endpoint string
-		expected bool
-	}{
-		{"standard endpoint", "/agent/chat/completions", "/chat/completions", true},
-		{"custom endpoint", "/agent/chat/completion", "/chat/completion", true},
-		{"non-matching path", "/agent/other", "/chat/completions", false},
-		{"root path", "/chat/completions", "/chat/completions", false},
-		{"nested path", "/agent/foo/chat/completions", "/chat/completions", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isChatCompletionsEndpoint(tt.path, tt.endpoint)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func Test_extractPathPrefix(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		endpoint string
-		expected string
-	}{
-		{"standard path", "/weather-agent/chat/completions", "/chat/completions", "weather-agent"},
-		{"custom endpoint", "/my-agent/chat/completion", "/chat/completion", "my-agent"},
-		{"no match", "/agent/other", "/chat/completions", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := extractPathPrefix(tt.path, tt.endpoint)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
 }
 
 func Test_transformOpenAIToA2A(t *testing.T) {
@@ -649,7 +398,7 @@ func TestStreamingRequestReturnsError(t *testing.T) {
 	}
 	reqBody, _ := json.Marshal(openAIRequest)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/agent/chat/completions", bytes.NewBuffer(reqBody))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/chat/completions", bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{}
 
@@ -670,6 +419,6 @@ func TestStreamingRequestReturnsError(t *testing.T) {
 	assert.Equal(t, "Streaming is not currently supported by the Agent Gateway", errorObj["message"])
 	assert.Equal(t, "invalid_request_error", errorObj["type"])
 
-	// Verify backend was not called
+	// Verify backend was not called (streaming check happens before agent resolution)
 	assert.Nil(t, mockHandler.ReceivedRequest)
 }

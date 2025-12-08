@@ -4,18 +4,19 @@ The OpenAI to A2A plugin provides OpenAI-compatible chat completion endpoints th
 
 ### Features
 
-- Intercepts requests at `/{path}/chat/completions` endpoints
-- Transforms OpenAI chat completion format to A2A JSON-RPC 2.0 format
-- Routes transformed requests to the corresponding agent endpoint at `/{path}`
-- Automatically generates required A2A fields (messageId, contextId)
-- Supports optional `X-Conversation-ID` header for conversation continuity
-- Preserves authentication and other headers
+- **Global `/chat/completions` endpoint**: Single endpoint for all agents using model-based routing
+- **`/models` endpoint**: List all available agents as OpenAI-compatible models
+- **Protocol transformation**: Converts OpenAI format to A2A JSON-RPC 2.0 format
+- **Dynamic routing**: Routes requests to agents based on the `model` parameter
+- **Auto-generation**: Automatically generates required A2A fields (messageId, contextId)
+- **Namespace support**: Supports both simple (`agent-name`) and namespaced (`namespace/agent-name`) model formats
+- **Conversation continuity**: Supports optional `X-Conversation-ID` header for maintaining context across requests
 
 ### Request Flow
 
 ```
-Client → /{agent-name}/chat/completions (OpenAI format)
-         ↓ Plugin transformation
+Client → /chat/completions (OpenAI format)
+         ↓ Plugin parses model parameter and resolves agent
          → /{agent-name} (A2A JSON-RPC format)
          → Agent Backend
 ```
@@ -54,7 +55,9 @@ Client → /{agent-name}/chat/completions (OpenAI format)
       "messageId": "9229e770-767c-417b-a0b0-f0741243c589",
       "contextId": "abcd1234-5678-90ab-cdef-1234567890ab"
     },
-    "metadata": {}
+    "metadata": {
+      "conversationId": "abcd1234-5678-90ab-cdef-1234567890ab"
+    }
   }
 }
 ```
@@ -80,12 +83,35 @@ The endpoint suffix is `/chat/completions` by default, but can be configured:
 
 ### Example Usage
 
+#### List Available Models
+
 ```bash
-curl http://localhost:10000/mock-agent/chat/completions \
+curl http://localhost:10000/models
+```
+
+Response:
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "mock-agent",
+      "object": "model",
+      "created": 1764083543,
+      "owned_by": "agentic-layer"
+    }
+  ]
+}
+```
+
+#### Send Chat Completion Request
+
+```bash
+curl http://localhost:10000/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-Conversation-ID: abcd1234-5678-90ab-cdef-1234567890ab" \
   -d '{
-    "model": "gpt-4",
+    "model": "mock-agent",
     "messages": [
       {
         "role": "user",
@@ -94,6 +120,10 @@ curl http://localhost:10000/mock-agent/chat/completions \
     ]
   }'
 ```
+
+**Model Parameter Formats:**
+- Simple format: `"model": "agent-name"` (when agent name is unique)
+- Namespaced format: `"model": "namespace/agent-name"` (when multiple agents have the same name, this format also works for agents with unique names)
 
 ### Conversation ID Management
 
