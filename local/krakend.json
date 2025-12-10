@@ -10,8 +10,18 @@
     "plugin/http-server": {
       "@comment_name": "Name order defines handler order. Last entry is outermost/first handler.",
       "name": [
-        "openai-a2a", "agentcard-rw"
-      ]
+        "agentcard-rw", "openai-a2a"
+      ],
+      "openai_a2a_config": {
+        "agents": [
+          {
+            "name": "mock-agent",
+            "namespace": "local",
+            "url": "http://mock-agent:8000",
+            "createdAt": 1731679815
+          }
+        ]
+      }
     },
     "router": {
       "disable_access_log": false,
@@ -23,7 +33,33 @@
   "name": "agent-gateway-krakend",
   "endpoints": [
     {
-      "endpoint": "/mock-agent/.well-known/agent-card.json",
+      "endpoint": "/models",
+      "output_encoding": "no-op",
+      "method": "GET",
+      "backend": [
+        {
+          "host": [
+            "http://localhost:10000"
+          ],
+          "url_pattern": "/"
+        }
+      ]
+    },
+    {
+      "endpoint": "/chat/completions",
+      "output_encoding": "no-op",
+      "method": "POST",
+      "backend": [
+        {
+          "host": [
+            "http://localhost:10000"
+          ],
+          "url_pattern": "/"
+        }
+      ]
+    },
+    {
+      "endpoint": "/local/mock-agent/.well-known/agent-card.json",
       "output_encoding": "no-op",
       "method": "GET",
       "backend": [
@@ -36,7 +72,7 @@
       ]
     },
     {
-      "endpoint": "/mock-agent",
+      "endpoint": "/local/mock-agent",
       "output_encoding": "no-op",
       "method": "POST",
       "backend": [

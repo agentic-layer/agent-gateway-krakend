@@ -59,7 +59,7 @@ Send a chat completion request:
 curl http://localhost:10000/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "mock-agent",
+    "model": "local/mock-agent",
     "messages": [{"role": "user", "content": "Hello"}]
   }'
 ```
@@ -71,7 +71,7 @@ For detailed API documentation, agent routing behavior, and model parameter form
 Verify the gateway proxy functionality with a JSON-RPC message:
 
 ```shell
-curl http://localhost:10000/mock-agent \
+curl http://localhost:10000/local/mock-agent \
   -H "Content-Type: application/json" \
   -d '{
      "jsonrpc": "2.0",
@@ -89,7 +89,7 @@ curl http://localhost:10000/mock-agent \
          "messageId": "9229e770-767c-417b-a0b0-f0741243c589",
          "contextId": "abcd1234-5678-90ab-cdef-1234567890ab"
        },
-       "metadata": {"conversationId": "9229e770-767c-417b-a0b0-f0741243c589"}
+       "metadata": {}
      }
    }' | jq
 ```
@@ -139,7 +139,7 @@ curl http://localhost:10000/mock-agent/chat/completions \
 curl http://localhost:10000/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "mock-agent",
+    "model": "default/mock-agent",
     "messages": [
       {
         "role": "user",
@@ -152,15 +152,14 @@ curl http://localhost:10000/chat/completions \
 #### Key Changes
 
 1. **Endpoint URL**: Use `/chat/completions` instead of `/{agent-name}/chat/completions`
-2. **Model Parameter**: The `model` field now specifies which agent to route to
-3. **Namespace Support**: Use `namespace/agent-name` format if multiple agents have the same name
-4. **Standardization**: The new endpoint follows the OpenAI API specification exactly
+2. **Model Parameter**: The `model` field now specifies which agent to route to using `namespace/agent-name` format
+3. **Standardization**: The new endpoint follows the OpenAI API specification exactly
 
 #### Benefits
 
-- **OpenAI Compatibility**: Full compatibility with OpenAI client libraries and tools (n8n, LangChain, etc.)
+- **OpenAI Compatibility**: Full compatibility with OpenAI client libraries and tools
 - **Simplified API**: Single endpoint for all agents reduces API surface
-- **Namespace Awareness**: Explicit namespace selection when needed via `namespace/agent-name` format
+- **Namespace Awareness**: Model IDs always use `namespace/agent-name` format
 
 ## Contribution
 

@@ -9,7 +9,7 @@ The OpenAI to A2A plugin provides OpenAI-compatible chat completion endpoints th
 - **Protocol transformation**: Converts OpenAI format to A2A JSON-RPC 2.0 format
 - **Dynamic routing**: Routes requests to agents based on the `model` parameter
 - **Auto-generation**: Automatically generates required A2A fields (messageId, contextId)
-- **Namespace support**: Supports both simple (`agent-name`) and namespaced (`namespace/agent-name`) model formats
+- **Namespace support**: Model IDs use `namespace/agent-name` format
 - **Conversation continuity**: Supports optional `X-Conversation-ID` header for maintaining context across requests
 
 ### Request Flow
@@ -17,7 +17,7 @@ The OpenAI to A2A plugin provides OpenAI-compatible chat completion endpoints th
 ```
 Client → /chat/completions (OpenAI format)
          ↓ Plugin parses model parameter and resolves agent
-         → /{agent-name} (A2A JSON-RPC format)
+         → /{namespace}/{agent-name} (A2A JSON-RPC format)
          → Agent Backend
 ```
 
@@ -25,7 +25,7 @@ Client → /chat/completions (OpenAI format)
 
 ```json
 {
-  "model": "gpt-4",
+  "model": "default/weather-agent",
   "messages": [
     {
       "role": "user",
@@ -55,16 +55,14 @@ Client → /chat/completions (OpenAI format)
       "messageId": "9229e770-767c-417b-a0b0-f0741243c589",
       "contextId": "abcd1234-5678-90ab-cdef-1234567890ab"
     },
-    "metadata": {
-      "conversationId": "abcd1234-5678-90ab-cdef-1234567890ab"
-    }
+    "metadata": {}
   }
 }
 ```
 
 ### Configuration
 
-The endpoint suffix is `/chat/completions` by default, but can be configured:
+The plugin is configured via `openai_a2a_config` in the KrakenD configuration. The operator automatically populates the agents list from exposed Agent CRDs.
 
 ```json
 {
@@ -74,7 +72,14 @@ The endpoint suffix is `/chat/completions` by default, but can be configured:
         "openai-a2a"
       ],
       "openai_a2a_config": {
-        "endpoint": "/chat/completion"
+        "agents": [
+          {
+            "name": "weather-agent",
+            "namespace": "default",
+            "url": "http://weather-agent.default.svc:8000",
+            "createdAt": 1731679815
+          }
+        ]
       }
     }
   }
@@ -95,10 +100,10 @@ Response:
   "object": "list",
   "data": [
     {
-      "id": "mock-agent",
+      "id": "local/mock-agent",
       "object": "model",
-      "created": 1764083543,
-      "owned_by": "agentic-layer"
+      "created": 1731679815,
+      "owned_by": "local"
     }
   ]
 }
@@ -111,7 +116,7 @@ curl http://localhost:10000/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-Conversation-ID: abcd1234-5678-90ab-cdef-1234567890ab" \
   -d '{
-    "model": "mock-agent",
+    "model": "local/mock-agent",
     "messages": [
       {
         "role": "user",
@@ -121,9 +126,9 @@ curl http://localhost:10000/chat/completions \
   }'
 ```
 
-**Model Parameter Formats:**
-- Simple format: `"model": "agent-name"` (when agent name is unique)
-- Namespaced format: `"model": "namespace/agent-name"` (when multiple agents have the same name, this format also works for agents with unique names)
+**Model Parameter Format:**
+
+Model IDs use the `namespace/agent-name` format (e.g., `"model": "default/weather-agent"`).
 
 ### Conversation ID Management
 
