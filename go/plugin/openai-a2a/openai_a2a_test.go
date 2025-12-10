@@ -15,22 +15,25 @@ import (
 
 const (
 	configStr = `{
-      "openai_a2a_config": {
-        "endpoint": "/chat/completions"
-      }
-	}`
-	configStrMinimal = `{
       "openai_a2a_config": {}
 	}`
-	configStrEmpty  = `{}`
-	configStrCustom = `{
+	configStrEmpty = `{}`
+	configStrWithAgents = `{
       "openai_a2a_config": {
-        "endpoint": "/chat/completion"
-      }
-	}`
-	configStrFaulty = `{
-      "openai_a2a_config": {
-        "endpoint": 123
+        "agents": [
+          {
+            "name": "test-agent",
+            "namespace": "default",
+            "url": "http://test-agent.default.svc:8000",
+            "createdAt": 1731679815
+          },
+          {
+            "name": "weather-agent",
+            "namespace": "production",
+            "url": "http://weather-agent.production.svc:8000",
+            "createdAt": 1731696200
+          }
+        ]
       }
 	}`
 )
@@ -92,21 +95,7 @@ func Test_parseConfig_returns_config_when_valid(t *testing.T) {
 
 	// then
 	assert.NoError(t, err)
-	assert.Equal(t, "/chat/completions", cfg.Endpoint)
-}
-
-func Test_parseConfig_minimal_returns_config_when_valid(t *testing.T) {
-	// given
-	var extraConfig map[string]interface{}
-	json.Unmarshal([]byte(configStrMinimal), &extraConfig)
-	var cfg config
-
-	// when
-	err := parseConfig(extraConfig, &cfg)
-
-	// then
-	assert.NoError(t, err)
-	assert.Equal(t, "/chat/completions", cfg.Endpoint)
+	assert.Empty(t, cfg.Agents)
 }
 
 func Test_parseConfig_returns_config_when_empty(t *testing.T) {
@@ -120,20 +109,33 @@ func Test_parseConfig_returns_config_when_empty(t *testing.T) {
 
 	// then
 	assert.NoError(t, err)
-	assert.Equal(t, "/chat/completions", cfg.Endpoint)
+	assert.Empty(t, cfg.Agents)
 }
 
-func Test_parseConfig_returns_error_when_invalid(t *testing.T) {
+func Test_parseConfig_with_agents(t *testing.T) {
 	// given
 	var extraConfig map[string]interface{}
-	json.Unmarshal([]byte(configStrFaulty), &extraConfig)
+	json.Unmarshal([]byte(configStrWithAgents), &extraConfig)
 	var cfg config
 
 	// when
 	err := parseConfig(extraConfig, &cfg)
 
 	// then
-	assert.Error(t, err)
+	assert.NoError(t, err)
+	assert.Len(t, cfg.Agents, 2)
+
+	// Verify first agent
+	assert.Equal(t, "test-agent", cfg.Agents[0].Name)
+	assert.Equal(t, "default", cfg.Agents[0].Namespace)
+	assert.Equal(t, "http://test-agent.default.svc:8000", cfg.Agents[0].URL)
+	assert.Equal(t, int64(1731679815), cfg.Agents[0].CreatedAt)
+
+	// Verify second agent
+	assert.Equal(t, "weather-agent", cfg.Agents[1].Name)
+	assert.Equal(t, "production", cfg.Agents[1].Namespace)
+	assert.Equal(t, "http://weather-agent.production.svc:8000", cfg.Agents[1].URL)
+	assert.Equal(t, int64(1731696200), cfg.Agents[1].CreatedAt)
 }
 
 func Test_transformOpenAIToA2A(t *testing.T) {
@@ -422,3 +424,4 @@ func TestStreamingRequestReturnsError(t *testing.T) {
 	// Verify backend was not called (streaming check happens before agent resolution)
 	assert.Nil(t, mockHandler.ReceivedRequest)
 }
+

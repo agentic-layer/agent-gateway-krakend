@@ -1,244 +1,250 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestParseModelParameter_SimpleFormat(t *testing.T) {
-	namespace, agentName, isNamespaced, err := parseModelParameter("test-agent")
-
-	assert.NoError(t, err)
-	assert.Equal(t, "", namespace)
-	assert.Equal(t, "test-agent", agentName)
-	assert.False(t, isNamespaced)
-}
-
-func TestParseModelParameter_NamespacedFormat(t *testing.T) {
-	namespace, agentName, isNamespaced, err := parseModelParameter("test-namespace/test-agent")
+func TestParseModelParameter_ValidFormat(t *testing.T) {
+	namespace, agentName, err := parseModelParameter("test-namespace/test-agent")
 
 	assert.NoError(t, err)
 	assert.Equal(t, "test-namespace", namespace)
 	assert.Equal(t, "test-agent", agentName)
-	assert.True(t, isNamespaced)
+}
+
+func TestParseModelParameter_SimpleFormat_Rejected(t *testing.T) {
+	// Simple format (without namespace) is no longer supported
+	_, _, err := parseModelParameter("test-agent")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "must be in format 'namespace/agent-name'")
+}
+
+func TestParseModelParameter_EmptyModel(t *testing.T) {
+	_, _, err := parseModelParameter("")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot be empty")
 }
 
 func TestParseModelParameter_MultipleSlashes(t *testing.T) {
-	// Multiple slashes should be rejected due to validation
-	_, _, _, err := parseModelParameter("namespace/agent/with/slashes")
+	// Multiple slashes should be rejected
+	_, _, err := parseModelParameter("namespace/agent/with/slashes")
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid namespaced model format")
+	assert.Contains(t, err.Error(), "invalid model format")
 }
 
-func TestResolveAgentBackend_SimpleFormat_UniqueAgent(t *testing.T) {
-	// Verifies agent matching logic without K8s dependency
+func TestParseModelParameter_PathTraversal(t *testing.T) {
+	// Path traversal attempts should be rejected
+	_, _, err := parseModelParameter("../namespace/agent")
 
-	agentName := "unique-agent"
-	agents := []Agent{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "unique-agent",
-				Namespace: "default",
-			},
-			Spec: AgentSpec{Exposed: true},
-			Status: AgentStatus{
-				URL: "http://unique-agent.default.svc.cluster.local:8000/.well-known/agent-card.json",
-			},
-		},
-	}
-
-	// Simulate resolution (same logic as resolveAgentBackend)
-	var matchingAgents []Agent
-	for _, agent := range agents {
-		if agent.Name == agentName {
-			matchingAgents = append(matchingAgents, agent)
-		}
-	}
-
-	assert.Len(t, matchingAgents, 1, "should find exactly one agent")
-	assert.Equal(t, "default", matchingAgents[0].Namespace)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid model parameter format")
 }
 
-func TestResolveAgentBackend_SimpleFormat_MultipleAgents(t *testing.T) {
-	// Test collision detection logic
-	agentName := "duplicate-agent"
-	agents := []Agent{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "duplicate-agent",
-				Namespace: "namespace-a",
-			},
-			Spec: AgentSpec{Exposed: true},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "duplicate-agent",
-				Namespace: "namespace-b",
-			},
-			Spec: AgentSpec{Exposed: true},
-		},
-	}
+func TestParseModelParameter_EmptyNamespace(t *testing.T) {
+	_, _, err := parseModelParameter("/test-agent")
 
-	// Simulate resolution
-	var matchingAgents []Agent
-	for _, agent := range agents {
-		if agent.Name == agentName {
-			matchingAgents = append(matchingAgents, agent)
-		}
-	}
-
-	// Verify collision is detected
-	assert.Len(t, matchingAgents, 2, "should find multiple agents with same name")
-
-	// Build error message (same logic as resolveAgentBackend)
-	if len(matchingAgents) > 1 {
-		var namespaces []string
-		for _, agent := range matchingAgents {
-			namespaces = append(namespaces, fmt.Sprintf("%s/%s", agent.Namespace, agent.Name))
-		}
-		errorMsg := fmt.Sprintf("multiple agents named %s found in different namespaces, please use namespaced format: %s",
-			agentName, fmt.Sprintf("%s, %s", namespaces[0], namespaces[1]))
-
-		assert.Contains(t, errorMsg, "namespace-a/duplicate-agent")
-		assert.Contains(t, errorMsg, "namespace-b/duplicate-agent")
-		assert.Contains(t, errorMsg, "please use namespaced format")
-	}
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid model format")
 }
 
-func TestResolveAgentBackend_SimpleFormat_NoAgent(t *testing.T) {
-	// Test missing agent logic
-	agentName := "non-existent-agent"
-	agents := []Agent{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "other-agent",
-				Namespace: "default",
-			},
-			Spec: AgentSpec{Exposed: true},
-		},
-	}
+func TestParseModelParameter_EmptyAgentName(t *testing.T) {
+	_, _, err := parseModelParameter("test-namespace/")
 
-	// Simulate resolution
-	var matchingAgents []Agent
-	for _, agent := range agents {
-		if agent.Name == agentName {
-			matchingAgents = append(matchingAgents, agent)
-		}
-	}
-
-	assert.Len(t, matchingAgents, 0, "should find no agents")
-
-	// Verify error would be returned
-	if len(matchingAgents) == 0 {
-		errorMsg := fmt.Sprintf("agent %s not found or not exposed", agentName)
-		assert.Contains(t, errorMsg, "not found or not exposed")
-	}
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid model format")
 }
 
-func TestResolveAgentBackend_NamespacedFormat_Found(t *testing.T) {
-	// Test namespaced format resolution
-	targetNamespace := "namespace-a"
-	targetName := "test-agent"
-	agents := []Agent{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-agent",
-				Namespace: "namespace-a",
-			},
-			Spec: AgentSpec{Exposed: true},
-			Status: AgentStatus{
-				URL: "http://test-agent.namespace-a.svc.cluster.local:8000/.well-known/agent-card.json",
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-agent",
-				Namespace: "namespace-b",
-			},
-			Spec: AgentSpec{Exposed: true},
-		},
-	}
-
-	// Simulate resolution with namespace
-	var foundAgent *Agent
-	for _, agent := range agents {
-		if agent.Name == targetName && agent.Namespace == targetNamespace {
-			foundAgent = &agent
-			break
-		}
-	}
-
-	assert.NotNil(t, foundAgent, "should find agent in specific namespace")
-	assert.Equal(t, "namespace-a", foundAgent.Namespace)
-	assert.NotEmpty(t, foundAgent.Status.URL)
-}
-
-func TestResolveAgentBackend_NamespacedFormat_NotFound(t *testing.T) {
-	// Test namespaced format with non-existent agent
-	targetNamespace := "namespace-c"
-	targetName := "test-agent"
-	agents := []Agent{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-agent",
-				Namespace: "namespace-a",
-			},
-			Spec: AgentSpec{Exposed: true},
-		},
-	}
-
-	// Simulate resolution
-	var foundAgent *Agent
-	for _, agent := range agents {
-		if agent.Name == targetName && agent.Namespace == targetNamespace {
-			foundAgent = &agent
-			break
-		}
-	}
-
-	assert.Nil(t, foundAgent, "should not find agent in wrong namespace")
-
-	// Verify error would be returned
-	if foundAgent == nil {
-		errorMsg := fmt.Sprintf("agent %s/%s not found or not exposed", targetNamespace, targetName)
-		assert.Contains(t, errorMsg, "namespace-c/test-agent")
-		assert.Contains(t, errorMsg, "not found or not exposed")
-	}
-}
-
-func TestModelInfo_BackendURLExtraction(t *testing.T) {
-	// Test backend URL construction from agent URL
+func TestParseModelParameter_InvalidNamespace(t *testing.T) {
 	testCases := []struct {
 		name        string
-		agentURL    string
-		expectedURL string
+		model       string
+		expectedErr string
 	}{
 		{
-			name:        "standard service URL",
-			agentURL:    "http://agent.namespace.svc.cluster.local:8000/.well-known/agent-card.json",
-			expectedURL: "http://agent.namespace.svc.cluster.local:8000",
+			name:        "uppercase namespace",
+			model:       "TestNamespace/agent",
+			expectedErr: "invalid namespace",
 		},
 		{
-			name:        "URL with different port",
-			agentURL:    "http://agent.namespace.svc.cluster.local:9000/.well-known/agent-card.json",
-			expectedURL: "http://agent.namespace.svc.cluster.local:9000",
+			name:        "namespace with underscore",
+			model:       "test_namespace/agent",
+			expectedErr: "invalid namespace",
 		},
 		{
-			name:        "HTTPS URL",
-			agentURL:    "https://agent.namespace.svc.cluster.local:8000/.well-known/agent-card.json",
-			expectedURL: "https://agent.namespace.svc.cluster.local:8000",
+			name:        "namespace starts with hyphen",
+			model:       "-namespace/agent",
+			expectedErr: "invalid namespace",
+		},
+		{
+			name:        "namespace ends with hyphen",
+			model:       "namespace-/agent",
+			expectedErr: "invalid namespace",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Contains(t, tc.agentURL, tc.expectedURL, "agent URL should contain backend URL")
+			_, _, err := parseModelParameter(tc.model)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tc.expectedErr)
 		})
 	}
+}
+
+func TestParseModelParameter_InvalidAgentName(t *testing.T) {
+	testCases := []struct {
+		name        string
+		model       string
+		expectedErr string
+	}{
+		{
+			name:        "uppercase agent name",
+			model:       "namespace/TestAgent",
+			expectedErr: "invalid agent name",
+		},
+		{
+			name:        "agent name with underscore",
+			model:       "namespace/test_agent",
+			expectedErr: "invalid agent name",
+		},
+		{
+			name:        "agent name starts with hyphen",
+			model:       "namespace/-agent",
+			expectedErr: "invalid agent name",
+		},
+		{
+			name:        "agent name ends with hyphen",
+			model:       "namespace/agent-",
+			expectedErr: "invalid agent name",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := parseModelParameter(tc.model)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tc.expectedErr)
+		})
+	}
+}
+
+func TestResolveAgentBackend_Found(t *testing.T) {
+	agents := []AgentInfo{
+		{
+			Name:      "test-agent",
+			Namespace: "namespace-a",
+			URL:       "http://test-agent.namespace-a.svc.cluster.local:8000",
+			CreatedAt: 1731679815,
+		},
+		{
+			Name:      "test-agent",
+			Namespace: "namespace-b",
+			URL:       "http://test-agent.namespace-b.svc.cluster.local:8000",
+			CreatedAt: 1731696200,
+		},
+	}
+
+	// Resolve agent from namespace-a
+	modelInfo, err := resolveAgentBackend("namespace-a/test-agent", agents)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, modelInfo)
+	assert.Equal(t, "test-agent", modelInfo.Name)
+	assert.Equal(t, "namespace-a", modelInfo.Namespace)
+	assert.Equal(t, "http://test-agent.namespace-a.svc.cluster.local:8000", modelInfo.URL)
+}
+
+func TestResolveAgentBackend_NotFound(t *testing.T) {
+	agents := []AgentInfo{
+		{
+			Name:      "other-agent",
+			Namespace: "default",
+			URL:       "http://other-agent.default.svc:8000",
+			CreatedAt: 1731679815,
+		},
+	}
+
+	// Try to resolve non-existent agent
+	_, err := resolveAgentBackend("default/non-existent", agents)
+
+	assert.Error(t, err)
+	resErr, ok := err.(*AgentResolutionError)
+	assert.True(t, ok)
+	assert.Equal(t, "not_found", resErr.Type)
+	assert.Contains(t, resErr.ClientMsg, "model not found")
+}
+
+func TestResolveAgentBackend_WrongNamespace(t *testing.T) {
+	agents := []AgentInfo{
+		{
+			Name:      "test-agent",
+			Namespace: "namespace-a",
+			URL:       "http://test-agent.namespace-a.svc:8000",
+			CreatedAt: 1731679815,
+		},
+	}
+
+	// Try to resolve with wrong namespace
+	_, err := resolveAgentBackend("namespace-b/test-agent", agents)
+
+	assert.Error(t, err)
+	resErr, ok := err.(*AgentResolutionError)
+	assert.True(t, ok)
+	assert.Equal(t, "not_found", resErr.Type)
+}
+
+func TestResolveAgentBackend_MissingURL(t *testing.T) {
+	agents := []AgentInfo{
+		{
+			Name:      "incomplete-agent",
+			Namespace: "default",
+			URL:       "", // Missing URL
+			CreatedAt: 1731679815,
+		},
+	}
+
+	_, err := resolveAgentBackend("default/incomplete-agent", agents)
+
+	assert.Error(t, err)
+	resErr, ok := err.(*AgentResolutionError)
+	assert.True(t, ok)
+	assert.Equal(t, "configuration_error", resErr.Type)
+	assert.Contains(t, resErr.InternalMsg, "no URL configured")
+}
+
+func TestResolveAgentBackend_InvalidFormat(t *testing.T) {
+	agents := []AgentInfo{
+		{
+			Name:      "test-agent",
+			Namespace: "default",
+			URL:       "http://test-agent.default.svc:8000",
+			CreatedAt: 1731679815,
+		},
+	}
+
+	// Simple name format should be rejected
+	_, err := resolveAgentBackend("test-agent", agents)
+
+	assert.Error(t, err)
+	resErr, ok := err.(*AgentResolutionError)
+	assert.True(t, ok)
+	assert.Equal(t, "invalid_format", resErr.Type)
+}
+
+func TestResolveAgentBackend_EmptyAgentsList(t *testing.T) {
+	agents := []AgentInfo{}
+
+	_, err := resolveAgentBackend("default/test-agent", agents)
+
+	assert.Error(t, err)
+	resErr, ok := err.(*AgentResolutionError)
+	assert.True(t, ok)
+	assert.Equal(t, "not_found", resErr.Type)
 }
 
 func TestModelInfo_Structure(t *testing.T) {
@@ -251,74 +257,50 @@ func TestModelInfo_Structure(t *testing.T) {
 	assert.Equal(t, "test-agent", modelInfo.Name)
 	assert.Equal(t, "test-namespace", modelInfo.Namespace)
 	assert.Equal(t, "http://test-agent.test-namespace.svc.cluster.local:8000", modelInfo.URL)
-	assert.Contains(t, modelInfo.URL, modelInfo.Namespace)
 }
 
-func TestResolveAgentBackend_AgentWithoutURL(t *testing.T) {
-	// Test handling of agent without status.url
-	agents := []Agent{
+func TestModelInfo_BackendURLExtraction(t *testing.T) {
+	testCases := []struct {
+		name        string
+		agentURL    string
+		expectedURL string
+	}{
 		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "incomplete-agent",
-				Namespace: "default",
-			},
-			Spec: AgentSpec{Exposed: true},
-			Status: AgentStatus{
-				URL: "", // Empty URL
-			},
+			name:        "standard service URL",
+			agentURL:    "http://agent.namespace.svc.cluster.local:8000",
+			expectedURL: "http://agent.namespace.svc.cluster.local:8000",
+		},
+		{
+			name:        "URL with different port",
+			agentURL:    "http://agent.namespace.svc.cluster.local:9000",
+			expectedURL: "http://agent.namespace.svc.cluster.local:9000",
+		},
+		{
+			name:        "HTTPS URL",
+			agentURL:    "https://agent.namespace.svc.cluster.local:8000",
+			expectedURL: "https://agent.namespace.svc.cluster.local:8000",
 		},
 	}
 
-	agent := agents[0]
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			agents := []AgentInfo{
+				{
+					Name:      "agent",
+					Namespace: "namespace",
+					URL:       tc.agentURL,
+					CreatedAt: 1731679815,
+				},
+			}
 
-	// Verify empty URL would cause error
-	if agent.Status.URL == "" {
-		errorMsg := fmt.Sprintf("agent %s has no URL in status", agent.Name)
-		assert.Contains(t, errorMsg, "incomplete-agent")
-		assert.Contains(t, errorMsg, "no URL in status")
+			modelInfo, err := resolveAgentBackend("namespace/agent", agents)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedURL, modelInfo.URL)
+		})
 	}
 }
 
-func TestResolveAgentBackend_OnlyExposedAgents(t *testing.T) {
-	// Verify that only exposed agents are considered
-	agents := []Agent{
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "exposed-agent",
-				Namespace: "default",
-			},
-			Spec: AgentSpec{Exposed: true},
-			Status: AgentStatus{
-				URL: "http://exposed-agent.default.svc.cluster.local:8000/.well-known/agent-card.json",
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "not-exposed-agent",
-				Namespace: "default",
-			},
-			Spec: AgentSpec{Exposed: false},
-			Status: AgentStatus{
-				URL: "http://not-exposed-agent.default.svc.cluster.local:8000/.well-known/agent-card.json",
-			},
-		},
-	}
-
-	// In resolveAgentBackend, only exposed agents are listed
-	// Simulate this filtering
-	exposedAgents := make([]Agent, 0)
-	for _, agent := range agents {
-		if agent.Spec.Exposed {
-			exposedAgents = append(exposedAgents, agent)
-		}
-	}
-
-	assert.Len(t, exposedAgents, 1)
-	assert.Equal(t, "exposed-agent", exposedAgents[0].Name)
-}
-
-func TestNamespacedPathConstruction(t *testing.T) {
-	// Test that the namespaced path is correctly constructed
+func TestAgentPathConstruction(t *testing.T) {
 	testCases := []struct {
 		name           string
 		agentName      string
@@ -347,68 +329,105 @@ func TestNamespacedPathConstruction(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// This simulates the path construction in handleGlobalChatCompletions (line 209)
-			namespacedPath := "/" + tc.agentNamespace + "/" + tc.agentName
+			// This simulates the path construction in handleGlobalChatCompletions
+			agentPath := "/" + tc.agentNamespace + "/" + tc.agentName
 
-			assert.Equal(t, tc.expectedPath, namespacedPath)
-			assert.Contains(t, namespacedPath, tc.agentNamespace, "path should contain namespace")
-			assert.Contains(t, namespacedPath, tc.agentName, "path should contain agent name")
-			assert.True(t, len(namespacedPath) > len(tc.agentName), "namespaced path should be longer than agent name alone")
+			assert.Equal(t, tc.expectedPath, agentPath)
+			assert.Contains(t, agentPath, tc.agentNamespace, "path should contain namespace")
+			assert.Contains(t, agentPath, tc.agentName, "path should contain agent name")
 		})
 	}
 }
 
 func TestRoutingPathFormat(t *testing.T) {
-	// Verify we always route to namespaced format regardless of how model was specified
 	testCases := []struct {
 		name         string
 		modelInfo    ModelInfo
 		expectedPath string
-		description  string
 	}{
 		{
-			name: "conflicting agent - must use namespaced path",
+			name: "agent in default namespace",
 			modelInfo: ModelInfo{
 				Name:      "test-agent",
 				Namespace: "default",
 				URL:       "http://test-agent.default.svc.cluster.local:8000",
 			},
 			expectedPath: "/default/test-agent",
-			description:  "Even though user specified 'default/test-agent', routing MUST use namespaced format",
 		},
 		{
-			name: "conflicting agent in different namespace",
+			name: "agent in custom namespace",
 			modelInfo: ModelInfo{
 				Name:      "test-agent",
 				Namespace: "test-namespace",
 				URL:       "http://test-agent.test-namespace.svc.cluster.local:8000",
 			},
 			expectedPath: "/test-namespace/test-agent",
-			description:  "Different namespace, same agent name - must route to correct namespace",
 		},
 		{
-			name: "unique agent - still uses namespaced path for consistency",
+			name: "agent with long name",
 			modelInfo: ModelInfo{
-				Name:      "unique-agent",
-				Namespace: "test-namespace",
-				URL:       "http://unique-agent.test-namespace.svc.cluster.local:8000",
+				Name:      "weather-forecast-agent",
+				Namespace: "production",
+				URL:       "http://weather-forecast-agent.production.svc.cluster.local:8000",
 			},
-			expectedPath: "/test-namespace/unique-agent",
-			description:  "Even unique agents route via namespaced endpoint for reliability",
+			expectedPath: "/production/weather-forecast-agent",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Verify namespaced path construction
-			// ALWAYS use namespaced format for routing
-			namespacedPath := "/" + tc.modelInfo.Namespace + "/" + tc.modelInfo.Name
+			agentPath := "/" + tc.modelInfo.Namespace + "/" + tc.modelInfo.Name
 
-			assert.Equal(t, tc.expectedPath, namespacedPath, tc.description)
-
-			// Verify we're NOT using simple format
-			simplePath := "/" + tc.modelInfo.Name
-			assert.NotEqual(t, simplePath, namespacedPath, "should NOT route to simple path format")
+			assert.Equal(t, tc.expectedPath, agentPath)
 		})
 	}
+}
+
+func TestValidateK8sName(t *testing.T) {
+	validNames := []string{
+		"valid-name",
+		"valid123",
+		"a",
+		"valid.name",
+		"valid-name-123",
+	}
+
+	for _, name := range validNames {
+		t.Run("valid_"+name, func(t *testing.T) {
+			err := validateK8sName(name)
+			assert.NoError(t, err)
+		})
+	}
+
+	invalidNames := []struct {
+		name        string
+		expectedErr string
+	}{
+		{"", "cannot be empty"},
+		{"-starts-with-hyphen", "must start with an alphanumeric"},
+		{"ends-with-hyphen-", "must end with an alphanumeric"},
+		{"Invalid-Uppercase", "must start with an alphanumeric"}, // Uppercase I is not alphanumeric (only a-z, 0-9)
+		{"invalid_underscore", "invalid character"},
+		{"invalid/slash", "invalid character"},
+	}
+
+	for _, tc := range invalidNames {
+		t.Run("invalid_"+tc.name, func(t *testing.T) {
+			err := validateK8sName(tc.name)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tc.expectedErr)
+		})
+	}
+}
+
+func TestAgentResolutionError_Structure(t *testing.T) {
+	err := &AgentResolutionError{
+		Type:        "not_found",
+		InternalMsg: "agent default/test-agent not found",
+		ClientMsg:   "model not found",
+	}
+
+	assert.Equal(t, "not_found", err.Type)
+	assert.Equal(t, "agent default/test-agent not found", err.Error())
+	assert.Equal(t, "model not found", err.ClientMsg)
 }

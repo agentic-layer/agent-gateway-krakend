@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -46,45 +45,38 @@ type ModelInfo struct {
 	URL       string
 }
 
-// parseModelParameter parses and validates the model parameter
-// Supports two formats:
-//   - Simple: "agent-name" (namespace will be resolved from K8s)
-//   - Namespaced: "namespace/agent-name"
-//
-// Returns an error if the model parameter doesn't conform to Kubernetes naming conventions
-func parseModelParameter(model string) (namespace string, agentName string, isNamespaced bool, err error) {
+// parseModelParameter parses and validates the model parameter.
+// Requires format: "namespace/agent-name"
+// Returns an error if the model parameter doesn't conform to the expected format.
+func parseModelParameter(model string) (namespace string, agentName string, err error) {
 	if model == "" {
-		return "", "", false, fmt.Errorf("model parameter cannot be empty")
+		return "", "", fmt.Errorf("model parameter cannot be empty")
 	}
 
 	// Check for path traversal attempts
 	if strings.Contains(model, "..") {
-		return "", "", false, fmt.Errorf("invalid model parameter format")
+		return "", "", fmt.Errorf("invalid model parameter format")
 	}
 
-	if strings.Contains(model, "/") {
-		parts := strings.Split(model, "/")
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-			return "", "", false, fmt.Errorf("invalid namespaced model format")
-		}
-
-		// Validate both namespace and agent name
-		if err := validateK8sName(parts[0]); err != nil {
-			return "", "", false, fmt.Errorf("invalid namespace: %w", err)
-		}
-		if err := validateK8sName(parts[1]); err != nil {
-			return "", "", false, fmt.Errorf("invalid agent name: %w", err)
-		}
-
-		return parts[0], parts[1], true, nil
+	// Requires format: namespace/agent-name
+	if !strings.Contains(model, "/") {
+		return "", "", fmt.Errorf("model parameter must be in format 'namespace/agent-name'")
 	}
 
-	// Validate simple agent name
-	if err := validateK8sName(model); err != nil {
-		return "", "", false, fmt.Errorf("invalid agent name: %w", err)
+	parts := strings.Split(model, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("invalid model format, expected 'namespace/agent-name'")
 	}
 
-	return "", model, false, nil
+	// Validate both namespace and agent name
+	if err := validateK8sName(parts[0]); err != nil {
+		return "", "", fmt.Errorf("invalid namespace: %w", err)
+	}
+	if err := validateK8sName(parts[1]); err != nil {
+		return "", "", fmt.Errorf("invalid agent name: %w", err)
+	}
+
+	return parts[0], parts[1], nil
 }
 
 // validateK8sName validates that a string conforms to Kubernetes DNS subdomain name rules
@@ -128,152 +120,67 @@ func isAlphanumeric(r rune) bool {
 
 // AgentResolutionError provides structured error information for agent resolution failures.
 type AgentResolutionError struct {
-	Type           string // "service_unavailable", "not_found", "ambiguous", "configuration_error"
-	InternalMsg    string // Detailed message for logging
-	ClientMsg      string // Generic message for clients
-	ShouldRetry    bool
-	RetryAfterSecs int
+	Type        string // "not_found", "configuration_error", "invalid_format"
+	InternalMsg string // Detailed message for logging
+	ClientMsg   string // Generic message for clients
 }
 
 func (e *AgentResolutionError) Error() string {
 	return e.InternalMsg
 }
 
-// resolveAgentBackend resolves the agent backend URL from the model parameter
-// Returns the backend URL and agent name for routing
-func resolveAgentBackend(ctx context.Context, model string) (*ModelInfo, error) {
-	namespace, agentName, isNamespaced, err := parseModelParameter(model)
+// resolveAgentBackend resolves the agent backend URL from the model parameter using config-provided agents.
+// Requires model names in format "namespace/agent-name".
+func resolveAgentBackend(model string, agents []AgentInfo) (*ModelInfo, error) {
+	namespace, agentName, err := parseModelParameter(model)
 	if err != nil {
 		return nil, &AgentResolutionError{
-			Type:        "not_found",
+			Type:        "invalid_format",
 			InternalMsg: fmt.Sprintf("invalid model parameter '%s': %v", model, err),
-			ClientMsg:   "invalid model parameter format",
+			ClientMsg:   fmt.Sprintf("invalid model format: %v", err),
 		}
 	}
 
-	// Create K8s client
-	k8sClient, err := NewK8sClient()
-	if err != nil {
-		return nil, &AgentResolutionError{
-			Type:           "service_unavailable",
-			InternalMsg:    fmt.Sprintf("failed to create Kubernetes client: %v", err),
-			ClientMsg:      "service temporarily unavailable",
-			ShouldRetry:    true,
-			RetryAfterSecs: 30,
-		}
-	}
-
-	// List all exposed agents
-	agents, err := k8sClient.ListExposedAgents(ctx)
-	if err != nil {
-		return nil, &AgentResolutionError{
-			Type:           "service_unavailable",
-			InternalMsg:    fmt.Sprintf("failed to list agents: %v", err),
-			ClientMsg:      "service temporarily unavailable",
-			ShouldRetry:    true,
-			RetryAfterSecs: 30,
-		}
-	}
-
-	if isNamespaced {
-		// Look for agent with specific namespace
-		for _, agent := range agents {
-			if agent.Name == agentName && agent.Namespace == namespace {
-				if agent.Status.URL == "" {
-					return nil, &AgentResolutionError{
-						Type:        "configuration_error",
-						InternalMsg: fmt.Sprintf("agent %s/%s has no URL in status", namespace, agentName),
-						ClientMsg:   "model is not available",
-					}
-				}
-
-				// Parse the URL to get host
-				parsedURL, err := url.Parse(agent.Status.URL)
-				if err != nil {
-					return nil, &AgentResolutionError{
-						Type:        "configuration_error",
-						InternalMsg: fmt.Sprintf("failed to parse agent URL for %s/%s: %v", namespace, agentName, err),
-						ClientMsg:   "model is not available",
-					}
-				}
-
-				backendURL := fmt.Sprintf("%s://%s", parsedURL.Scheme, parsedURL.Host)
-
-				return &ModelInfo{
-					Name:      agentName,
-					Namespace: namespace,
-					URL:       backendURL,
-				}, nil
-			}
-		}
-		return nil, &AgentResolutionError{
-			Type:        "not_found",
-			InternalMsg: fmt.Sprintf("agent %s/%s not found or not exposed", namespace, agentName),
-			ClientMsg:   "model not found",
-		}
-	}
-
-	// Simple format - find unique agent by name
-	var matchingAgents []Agent
+	// Look for agent with matching namespace and name
 	for _, agent := range agents {
-		if agent.Name == agentName {
-			matchingAgents = append(matchingAgents, agent)
+		if agent.Name == agentName && agent.Namespace == namespace {
+			if agent.URL == "" {
+				return nil, &AgentResolutionError{
+					Type:        "configuration_error",
+					InternalMsg: fmt.Sprintf("agent %s/%s has no URL configured", namespace, agentName),
+					ClientMsg:   "model is not available",
+				}
+			}
+
+			// Parse the URL to get host
+			parsedURL, err := url.Parse(agent.URL)
+			if err != nil {
+				return nil, &AgentResolutionError{
+					Type:        "configuration_error",
+					InternalMsg: fmt.Sprintf("failed to parse agent URL for %s/%s: %v", namespace, agentName, err),
+					ClientMsg:   "model is not available",
+				}
+			}
+
+			backendURL := fmt.Sprintf("%s://%s", parsedURL.Scheme, parsedURL.Host)
+
+			return &ModelInfo{
+				Name:      agentName,
+				Namespace: namespace,
+				URL:       backendURL,
+			}, nil
 		}
 	}
 
-	if len(matchingAgents) == 0 {
-		return nil, &AgentResolutionError{
-			Type:        "not_found",
-			InternalMsg: fmt.Sprintf("agent %s not found or not exposed", agentName),
-			ClientMsg:   "model not found",
-		}
+	return nil, &AgentResolutionError{
+		Type:        "not_found",
+		InternalMsg: fmt.Sprintf("agent %s/%s not found in configuration", namespace, agentName),
+		ClientMsg:   "model not found",
 	}
-
-	if len(matchingAgents) > 1 {
-		// Build list of available namespaced names for logging
-		var namespaces []string
-		for _, agent := range matchingAgents {
-			namespaces = append(namespaces, fmt.Sprintf("%s/%s", agent.Namespace, agent.Name))
-		}
-		return nil, &AgentResolutionError{
-			Type: "ambiguous",
-			InternalMsg: fmt.Sprintf("multiple agents named %s found in namespaces: %s",
-				agentName, strings.Join(namespaces, ", ")),
-			ClientMsg: "model name is ambiguous, please use the format 'namespace/model'",
-		}
-	}
-
-	// Single match found
-	agent := matchingAgents[0]
-	if agent.Status.URL == "" {
-		return nil, &AgentResolutionError{
-			Type:        "configuration_error",
-			InternalMsg: fmt.Sprintf("agent %s in namespace %s has no URL in status", agentName, agent.Namespace),
-			ClientMsg:   "model is not available",
-		}
-	}
-
-	// Parse the URL to get host
-	parsedURL, err := url.Parse(agent.Status.URL)
-	if err != nil {
-		return nil, &AgentResolutionError{
-			Type:        "configuration_error",
-			InternalMsg: fmt.Sprintf("failed to parse agent URL for %s: %v", agentName, err),
-			ClientMsg:   "model is not available",
-		}
-	}
-
-	backendURL := fmt.Sprintf("%s://%s", parsedURL.Scheme, parsedURL.Host)
-
-	return &ModelInfo{
-		Name:      agent.Name,
-		Namespace: agent.Namespace,
-		URL:       backendURL,
-	}, nil
 }
 
 // handleGlobalChatCompletions handles POST /chat/completions requests
-func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handler http.Handler) {
+func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handler http.Handler, agents []AgentInfo) {
 	reqLogger := logging.NewWithPluginName(pluginName)
 
 	if req.Method != http.MethodPost {
@@ -299,7 +206,7 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		return
 	}
 
-	// Check for streaming (not supported) - check early to avoid unnecessary K8s lookups
+	// Check for streaming (not supported)
 	if openAIReq.Stream {
 		reqLogger.Warn("streaming request detected, returning error (streaming not supported)")
 		errorResponse := map[string]interface{}{
@@ -326,23 +233,18 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 
 	reqLogger.Debug("resolving agent for model: %s", openAIReq.Model)
 
-	// Resolve agent backend
-	modelInfo, err := resolveAgentBackend(req.Context(), openAIReq.Model)
+	// Resolve agent backend from config
+	modelInfo, err := resolveAgentBackend(openAIReq.Model, agents)
 	if err != nil {
 		reqLogger.Error("failed to resolve agent: %s", err)
 
 		// Handle structured errors
 		if resErr, ok := err.(*AgentResolutionError); ok {
-			if resErr.ShouldRetry {
-				w.Header().Set("Retry-After", fmt.Sprintf("%d", resErr.RetryAfterSecs))
-				http.Error(w, resErr.ClientMsg, http.StatusServiceUnavailable)
-			} else {
-				statusCode := http.StatusBadRequest
-				if resErr.Type == "not_found" {
-					statusCode = http.StatusNotFound
-				}
-				http.Error(w, resErr.ClientMsg, statusCode)
+			statusCode := http.StatusBadRequest
+			if resErr.Type == "not_found" {
+				statusCode = http.StatusNotFound
 			}
+			http.Error(w, resErr.ClientMsg, statusCode)
 		} else {
 			// Fallback for unexpected errors
 			http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -377,16 +279,14 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		return
 	}
 
-	// Route to namespaced endpoint (always uses namespace prefix for reliability)
-	// The operator generates both /namespace/agent and /agent endpoints for unique agents,
-	// but we always route via namespaced format to avoid ambiguity
-	namespacedPath := "/" + modelInfo.Namespace + "/" + modelInfo.Name
-	reqLogger.Debug("transformed OpenAI request to A2A format, forwarding to: %s", namespacedPath)
+	// Route to agent endpoint
+	agentPath := "/" + modelInfo.Namespace + "/" + modelInfo.Name
+	reqLogger.Debug("transformed OpenAI request to A2A format, forwarding to: %s", agentPath)
 
 	// Create new request to backend
 	req.Body = io.NopCloser(bytes.NewReader(a2aBody))
 	req.ContentLength = int64(len(a2aBody))
-	req.URL.Path = namespacedPath
+	req.URL.Path = agentPath
 	req.Header.Set(headers.ContentType, "application/json")
 
 	// Wrap response writer to capture A2A response

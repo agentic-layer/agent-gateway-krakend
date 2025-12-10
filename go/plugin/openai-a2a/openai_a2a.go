@@ -15,13 +15,20 @@ import (
 )
 
 const (
-	pluginName      = "openai-a2a"
-	configKey       = "openai_a2a_config"
-	defaultEndpoint = "/chat/completions"
+	pluginName = "openai-a2a"
+	configKey  = "openai_a2a_config"
 )
 
+// AgentInfo represents an agent configuration provided by the operator
+type AgentInfo struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	URL       string `json:"url"`
+	CreatedAt int64  `json:"createdAt"`
+}
+
 type config struct {
-	Endpoint string `json:"endpoint"`
+	Agents []AgentInfo `json:"agents"`
 }
 
 type registerer string
@@ -50,7 +57,7 @@ func (r registerer) registerHandlers(_ context.Context, extra map[string]interfa
 	if err != nil {
 		return nil, err
 	}
-	logger.Info("configuration loaded successfully")
+	logger.Info("configuration loaded successfully with %d agents", len(cfg.Agents))
 
 	return http.HandlerFunc(r.handleRequest(cfg, handler)), nil
 }
@@ -59,13 +66,13 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Handle GET /models endpoint
 		if req.Method == http.MethodGet && req.URL.Path == "/models" {
-			handleModelsRequest(w, req)
+			handleModelsRequest(w, req, cfg.Agents)
 			return
 		}
 
-		// Handle POST /chat/completions endpoint
+		// Handle POST /chat/completions endpoint (OpenAI-compatible)
 		if req.Method == http.MethodPost && req.URL.Path == "/chat/completions" {
-			handleGlobalChatCompletions(w, req, handler)
+			handleGlobalChatCompletions(w, req, handler, cfg.Agents)
 			return
 		}
 
@@ -184,8 +191,7 @@ func transformOpenAIToA2A(openAIReq models.OpenAIRequest, conversationId string)
 
 func parseConfig(extra map[string]interface{}, config *config) error {
 	if extra[configKey] == nil {
-		config.Endpoint = defaultEndpoint
-		logger.Info("using default %s.endpoint %v", configKey, defaultEndpoint)
+		// No config provided, use empty agents list
 		return nil
 	}
 
@@ -201,11 +207,6 @@ func parseConfig(extra map[string]interface{}, config *config) error {
 	err = json.Unmarshal(raw, config)
 	if err != nil {
 		return fmt.Errorf("cannot parse extra config: %s", err.Error())
-	}
-
-	if config.Endpoint == "" {
-		config.Endpoint = defaultEndpoint
-		logger.Info("using default %s.endpoint %v", configKey, defaultEndpoint)
 	}
 
 	return nil
