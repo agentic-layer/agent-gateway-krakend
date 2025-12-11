@@ -15,9 +15,9 @@
       "openai_a2a_config": {
         "agents": [
           {
-            "name": "mock-agent",
-            "namespace": "local",
+            "model_id": "local/mock-agent",
             "url": "http://mock-agent:8000",
+            "owned_by": "local",
             "createdAt": 1731679815
           }
         ]
@@ -32,32 +32,6 @@
   "output_encoding": "json",
   "name": "agent-gateway-krakend",
   "endpoints": [
-    {
-      "endpoint": "/models",
-      "output_encoding": "no-op",
-      "method": "GET",
-      "backend": [
-        {
-          "host": [
-            "http://localhost:10000"
-          ],
-          "url_pattern": "/"
-        }
-      ]
-    },
-    {
-      "endpoint": "/chat/completions",
-      "output_encoding": "no-op",
-      "method": "POST",
-      "backend": [
-        {
-          "host": [
-            "http://localhost:10000"
-          ],
-          "url_pattern": "/"
-        }
-      ]
-    },
     {
       "endpoint": "/local/mock-agent/.well-known/agent-card.json",
       "output_encoding": "no-op",

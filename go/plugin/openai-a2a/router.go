@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -38,84 +39,11 @@ func (rw *responseWriter) WriteHeader(statusCode int) {
 	rw.statusCode = statusCode
 }
 
-// ModelInfo contains information about an agent model
+// ModelInfo contains routing information for an agent
 type ModelInfo struct {
-	Name      string
-	Namespace string
-	URL       string
-}
-
-// parseModelParameter parses and validates the model parameter.
-// Requires format: "namespace/agent-name"
-// Returns an error if the model parameter doesn't conform to the expected format.
-func parseModelParameter(model string) (namespace string, agentName string, err error) {
-	if model == "" {
-		return "", "", fmt.Errorf("model parameter cannot be empty")
-	}
-
-	// Check for path traversal attempts
-	if strings.Contains(model, "..") {
-		return "", "", fmt.Errorf("invalid model parameter format")
-	}
-
-	// Requires format: namespace/agent-name
-	if !strings.Contains(model, "/") {
-		return "", "", fmt.Errorf("model parameter must be in format 'namespace/agent-name'")
-	}
-
-	parts := strings.Split(model, "/")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid model format, expected 'namespace/agent-name'")
-	}
-
-	// Validate both namespace and agent name
-	if err := validateK8sName(parts[0]); err != nil {
-		return "", "", fmt.Errorf("invalid namespace: %w", err)
-	}
-	if err := validateK8sName(parts[1]); err != nil {
-		return "", "", fmt.Errorf("invalid agent name: %w", err)
-	}
-
-	return parts[0], parts[1], nil
-}
-
-// validateK8sName validates that a string conforms to Kubernetes DNS subdomain name rules
-// Names must:
-// - contain only lowercase alphanumeric characters, '-' or '.'
-// - start and end with an alphanumeric character
-// - be at most 253 characters long
-func validateK8sName(name string) error {
-	if name == "" {
-		return fmt.Errorf("name cannot be empty")
-	}
-
-	if len(name) > 253 {
-		return fmt.Errorf("name exceeds maximum length of 253 characters")
-	}
-
-	// Check first character (must be alphanumeric)
-	if !isAlphanumeric(rune(name[0])) {
-		return fmt.Errorf("name must start with an alphanumeric character")
-	}
-
-	// Check last character (must be alphanumeric)
-	if !isAlphanumeric(rune(name[len(name)-1])) {
-		return fmt.Errorf("name must end with an alphanumeric character")
-	}
-
-	// Check all characters
-	for _, char := range name {
-		if !isAlphanumeric(char) && char != '-' && char != '.' {
-			return fmt.Errorf("name contains invalid character '%c'", char)
-		}
-	}
-
-	return nil
-}
-
-// isAlphanumeric checks if a rune is a lowercase letter or digit
-func isAlphanumeric(r rune) bool {
-	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+	ModelID string
+	Path    string
+	URL     string
 }
 
 // AgentResolutionError provides structured error information for agent resolution failures.
@@ -129,52 +57,62 @@ func (e *AgentResolutionError) Error() string {
 	return e.InternalMsg
 }
 
-// resolveAgentBackend resolves the agent backend URL from the model parameter using config-provided agents.
-// Requires model names in format "namespace/agent-name".
+// resolveAgentBackend resolves the agent backend URL from the model parameter.
 func resolveAgentBackend(model string, agents []AgentInfo) (*ModelInfo, error) {
-	namespace, agentName, err := parseModelParameter(model)
-	if err != nil {
+	if model == "" {
 		return nil, &AgentResolutionError{
 			Type:        "invalid_format",
-			InternalMsg: fmt.Sprintf("invalid model parameter '%s': %v", model, err),
-			ClientMsg:   fmt.Sprintf("invalid model format: %v", err),
+			InternalMsg: "model parameter cannot be empty",
+			ClientMsg:   "model parameter is required",
 		}
 	}
 
-	// Look for agent with matching namespace and name
+	// Basic security check for path traversal
+	if strings.Contains(model, "..") {
+		return nil, &AgentResolutionError{
+			Type:        "invalid_format",
+			InternalMsg: fmt.Sprintf("invalid model parameter '%s': path traversal detected", model),
+			ClientMsg:   "invalid model parameter",
+		}
+	}
+
+	// Look for agent with matching model ID
 	for _, agent := range agents {
-		if agent.Name == agentName && agent.Namespace == namespace {
+		if agent.ModelID == model {
 			if agent.URL == "" {
 				return nil, &AgentResolutionError{
 					Type:        "configuration_error",
-					InternalMsg: fmt.Sprintf("agent %s/%s has no URL configured", namespace, agentName),
+					InternalMsg: fmt.Sprintf("agent %s has no URL configured", model),
 					ClientMsg:   "model is not available",
 				}
 			}
 
-			// Parse the URL to get host
+			// Parse the URL to extract scheme and host
 			parsedURL, err := url.Parse(agent.URL)
 			if err != nil {
 				return nil, &AgentResolutionError{
 					Type:        "configuration_error",
-					InternalMsg: fmt.Sprintf("failed to parse agent URL for %s/%s: %v", namespace, agentName, err),
+					InternalMsg: fmt.Sprintf("failed to parse agent URL for %s: %v", model, err),
 					ClientMsg:   "model is not available",
 				}
 			}
 
 			backendURL := fmt.Sprintf("%s://%s", parsedURL.Scheme, parsedURL.Host)
 
+			// Construct routing path from model ID
+			path := "/" + model
+
 			return &ModelInfo{
-				Name:      agentName,
-				Namespace: namespace,
-				URL:       backendURL,
+				ModelID: model,
+				Path:    path,
+				URL:     backendURL,
 			}, nil
 		}
 	}
 
 	return nil, &AgentResolutionError{
 		Type:        "not_found",
-		InternalMsg: fmt.Sprintf("agent %s/%s not found in configuration", namespace, agentName),
+		InternalMsg: fmt.Sprintf("model %s not found in configuration", model),
 		ClientMsg:   "model not found",
 	}
 }
@@ -239,7 +177,8 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		reqLogger.Error("failed to resolve agent: %s", err)
 
 		// Handle structured errors
-		if resErr, ok := err.(*AgentResolutionError); ok {
+		var resErr *AgentResolutionError
+		if errors.As(err, &resErr) {
 			statusCode := http.StatusBadRequest
 			if resErr.Type == "not_found" {
 				statusCode = http.StatusNotFound
@@ -252,7 +191,7 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		return
 	}
 
-	reqLogger.Debug("resolved agent %s in namespace %s with backend %s", modelInfo.Name, modelInfo.Namespace, modelInfo.URL)
+	reqLogger.Debug("resolved model %s with backend %s", modelInfo.ModelID, modelInfo.URL)
 
 	// Get conversation ID from header
 	conversationId := req.Header.Get("X-Conversation-ID")
@@ -279,14 +218,13 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		return
 	}
 
-	// Route to agent endpoint
-	agentPath := "/" + modelInfo.Namespace + "/" + modelInfo.Name
-	reqLogger.Debug("transformed OpenAI request to A2A format, forwarding to: %s", agentPath)
+	// Route to agent endpoint using model's path
+	reqLogger.Debug("transformed OpenAI request to A2A format, forwarding to: %s", modelInfo.Path)
 
 	// Create new request to backend
 	req.Body = io.NopCloser(bytes.NewReader(a2aBody))
 	req.ContentLength = int64(len(a2aBody))
-	req.URL.Path = agentPath
+	req.URL.Path = modelInfo.Path
 	req.Header.Set(headers.ContentType, "application/json")
 
 	// Wrap response writer to capture A2A response
