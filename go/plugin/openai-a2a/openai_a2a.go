@@ -19,18 +19,6 @@ const (
 	configKey  = "openai_a2a_config"
 )
 
-// AgentInfo represents an agent configuration provided by the operator
-type AgentInfo struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	URL       string `json:"url"`
-	CreatedAt int64  `json:"createdAt"`
-}
-
-type config struct {
-	Agents []AgentInfo `json:"agents"`
-}
-
 type registerer string
 
 // HandlerRegisterer is the name of the symbol krakend looks up to try and register plugins

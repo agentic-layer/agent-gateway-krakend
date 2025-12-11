@@ -9,7 +9,7 @@ The OpenAI to A2A plugin provides OpenAI-compatible chat completion endpoints th
 - **Protocol transformation**: Converts OpenAI format to A2A JSON-RPC 2.0 format
 - **Dynamic routing**: Routes requests to agents based on the `model` parameter
 - **Auto-generation**: Automatically generates required A2A fields (messageId, contextId)
-- **Namespace support**: Model IDs use `namespace/agent-name` format
+- **Flexible identifiers**: Supports any model ID format provided by configuration
 - **Conversation continuity**: Supports optional `X-Conversation-ID` header for maintaining context across requests
 
 ### Request Flow
@@ -17,7 +17,7 @@ The OpenAI to A2A plugin provides OpenAI-compatible chat completion endpoints th
 ```
 Client → /chat/completions (OpenAI format)
          ↓ Plugin parses model parameter and resolves agent
-         → /{namespace}/{agent-name} (A2A JSON-RPC format)
+         → /{model-id} (A2A JSON-RPC format)
          → Agent Backend
 ```
 
@@ -62,7 +62,7 @@ Client → /chat/completions (OpenAI format)
 
 ### Configuration
 
-The plugin is configured via `openai_a2a_config` in the KrakenD configuration. The operator automatically populates the agents list from exposed Agent CRDs.
+The plugin is configured via `openai_a2a_config` in the KrakenD configuration. The agents list is populated by the configuration manager (e.g., the Kubernetes operator in a K8s deployment).
 
 ```json
 {
@@ -74,9 +74,9 @@ The plugin is configured via `openai_a2a_config` in the KrakenD configuration. T
       "openai_a2a_config": {
         "agents": [
           {
-            "name": "weather-agent",
-            "namespace": "default",
-            "url": "http://weather-agent.default.svc:8000",
+            "model_id": "default/weather-agent",
+            "url": "http://weather-agent:8000",
+            "owned_by": "default",
             "createdAt": 1731679815
           }
         ]
@@ -126,9 +126,9 @@ curl http://localhost:10000/chat/completions \
   }'
 ```
 
-**Model Parameter Format:**
+**Model Parameter:**
 
-Model IDs use the `namespace/agent-name` format (e.g., `"model": "default/weather-agent"`).
+The `model` field specifies which agent to route to. Model ID format is determined by your gateway configuration.
 
 ### Conversation ID Management
 

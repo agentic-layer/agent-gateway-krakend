@@ -152,14 +152,13 @@ curl http://localhost:10000/chat/completions \
 #### Key Changes
 
 1. **Endpoint URL**: Use `/chat/completions` instead of `/{agent-name}/chat/completions`
-2. **Model Parameter**: The `model` field now specifies which agent to route to using `namespace/agent-name` format
+2. **Model Parameter**: The `model` field now specifies which agent to route to.
 3. **Standardization**: The new endpoint follows the OpenAI API specification exactly
 
 #### Benefits
 
 - **OpenAI Compatibility**: Full compatibility with OpenAI client libraries and tools
 - **Simplified API**: Single endpoint for all agents reduces API surface
-- **Namespace Awareness**: Model IDs always use `namespace/agent-name` format
 
 ## Contribution
 

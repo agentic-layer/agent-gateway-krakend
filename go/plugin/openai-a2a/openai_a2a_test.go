@@ -22,15 +22,15 @@ const (
       "openai_a2a_config": {
         "agents": [
           {
-            "name": "test-agent",
-            "namespace": "default",
-            "url": "http://test-agent.default.svc:8000",
+            "model_id": "test-agent-v2",
+            "url": "http://localhost:8001",
+            "owned_by": "testing",
             "createdAt": 1731679815
           },
           {
-            "name": "weather-agent",
-            "namespace": "production",
-            "url": "http://weather-agent.production.svc:8000",
+            "model_id": "prod/weather-agent",
+            "url": "http://localhost:8002",
+            "owned_by": "weather-team",
             "createdAt": 1731696200
           }
         ]
@@ -126,15 +126,15 @@ func Test_parseConfig_with_agents(t *testing.T) {
 	assert.Len(t, cfg.Agents, 2)
 
 	// Verify first agent
-	assert.Equal(t, "test-agent", cfg.Agents[0].Name)
-	assert.Equal(t, "default", cfg.Agents[0].Namespace)
-	assert.Equal(t, "http://test-agent.default.svc:8000", cfg.Agents[0].URL)
+	assert.Equal(t, "test-agent-v2", cfg.Agents[0].ModelID)
+	assert.Equal(t, "http://localhost:8001", cfg.Agents[0].URL)
+	assert.Equal(t, "testing", cfg.Agents[0].OwnedBy)
 	assert.Equal(t, int64(1731679815), cfg.Agents[0].CreatedAt)
 
 	// Verify second agent
-	assert.Equal(t, "weather-agent", cfg.Agents[1].Name)
-	assert.Equal(t, "production", cfg.Agents[1].Namespace)
-	assert.Equal(t, "http://weather-agent.production.svc:8000", cfg.Agents[1].URL)
+	assert.Equal(t, "prod/weather-agent", cfg.Agents[1].ModelID)
+	assert.Equal(t, "http://localhost:8002", cfg.Agents[1].URL)
+	assert.Equal(t, "weather-team", cfg.Agents[1].OwnedBy)
 	assert.Equal(t, int64(1731696200), cfg.Agents[1].CreatedAt)
 }
 

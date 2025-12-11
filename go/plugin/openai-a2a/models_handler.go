@@ -5,24 +5,11 @@ import (
 	"net/http"
 
 	"github.com/agentic-layer/agent-gateway-krakend/lib/logging"
+	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
 )
 
-// OpenAIModel represents a model in the OpenAI API format
-type OpenAIModel struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	OwnedBy string `json:"owned_by"`
-}
-
-// OpenAIModelsResponse represents the response for /models endpoint
-type OpenAIModelsResponse struct {
-	Object string        `json:"object"`
-	Data   []OpenAIModel `json:"data"`
-}
-
 // handleModelsRequest handles GET /models requests by returning agents in OpenAI-compatible format.
-// Agents are provided via plugin configuration from the operator.
+// Agents are provided via plugin configuration.
 func handleModelsRequest(w http.ResponseWriter, req *http.Request, agents []AgentInfo) {
 	reqLogger := logging.NewWithPluginName(pluginName)
 
@@ -34,22 +21,20 @@ func handleModelsRequest(w http.ResponseWriter, req *http.Request, agents []Agen
 
 	reqLogger.Debug("handling /models request with %d configured agents", len(agents))
 
-	// Build OpenAI models response - use namespace/name format
-	models := make([]OpenAIModel, 0, len(agents))
+	// Build OpenAI models response from configured agents
+	modelsList := make([]models.OpenAIModel, 0, len(agents))
 	for _, agent := range agents {
-		modelID := agent.Namespace + "/" + agent.Name
-
-		models = append(models, OpenAIModel{
-			ID:      modelID,
+		modelsList = append(modelsList, models.OpenAIModel{
+			ID:      agent.ModelID,
 			Object:  "model",
 			Created: agent.CreatedAt,
-			OwnedBy: agent.Namespace,
+			OwnedBy: agent.OwnedBy,
 		})
 	}
 
-	response := OpenAIModelsResponse{
+	response := models.OpenAIModelsResponse{
 		Object: "list",
-		Data:   models,
+		Data:   modelsList,
 	}
 
 	// Marshal and send response
@@ -60,7 +45,7 @@ func handleModelsRequest(w http.ResponseWriter, req *http.Request, agents []Agen
 		return
 	}
 
-	reqLogger.Debug("returning %d models", len(models))
+	reqLogger.Debug("returning %d models", len(modelsList))
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
