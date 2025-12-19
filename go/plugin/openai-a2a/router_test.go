@@ -84,7 +84,7 @@ func TestResolveAgentBackend_PathTraversal(t *testing.T) {
 	resErr, ok := err.(*AgentResolutionError)
 	assert.True(t, ok)
 	assert.Equal(t, "invalid_format", resErr.Type)
-	assert.Contains(t, resErr.InternalMsg, "path traversal")
+	assert.Contains(t, resErr.InternalMsg, "invalid pattern '..'")
 }
 
 func TestResolveAgentBackend_MissingURL(t *testing.T) {

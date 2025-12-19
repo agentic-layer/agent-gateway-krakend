@@ -67,8 +67,17 @@ func resolveAgentBackend(model string, agents []AgentInfo) (*ModelInfo, error) {
 		}
 	}
 
+	// Check for invalid patterns
+	if strings.Contains(model, "..") {
+		return nil, &AgentResolutionError{
+			Type:        "invalid_format",
+			InternalMsg: fmt.Sprintf("invalid model parameter '%s': contains invalid pattern '..'", model),
+			ClientMsg:   "invalid model parameter format",
+		}
+	}
+
 	// Validate model parameter contains only valid URL path characters
-	if strings.ContainsAny(model, "/?#[]@!$&'()*+,;=") || strings.Contains(model, "..") {
+	if strings.ContainsAny(model, "?#[]@!$&'()*+,;=") {
 		return nil, &AgentResolutionError{
 			Type:        "invalid_format",
 			InternalMsg: fmt.Sprintf("invalid model parameter '%s': contains invalid characters", model),
