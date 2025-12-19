@@ -67,12 +67,12 @@ func resolveAgentBackend(model string, agents []AgentInfo) (*ModelInfo, error) {
 		}
 	}
 
-	// Basic security check for path traversal
-	if strings.Contains(model, "..") {
+	// Validate model parameter contains only valid URL path characters
+	if strings.ContainsAny(model, "/?#[]@!$&'()*+,;=") || strings.Contains(model, "..") {
 		return nil, &AgentResolutionError{
 			Type:        "invalid_format",
-			InternalMsg: fmt.Sprintf("invalid model parameter '%s': path traversal detected", model),
-			ClientMsg:   "invalid model parameter",
+			InternalMsg: fmt.Sprintf("invalid model parameter '%s': contains invalid characters", model),
+			ClientMsg:   "invalid model parameter format",
 		}
 	}
 
