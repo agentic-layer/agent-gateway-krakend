@@ -1,6 +1,6 @@
-ARG KRAKENX_VERSION=2.11.0
+ARG KRAKENX_VERSION=2.12.1
 
-# NOTE: golang version must match exactly the one in https://github.com/devopsfaith/krakend-ce/blob/v2.10.1/Makefile
+# NOTE: golang version must match exactly the one in https://github.com/devopsfaith/krakend-ce/blob/v2.12.1/Makefile
 FROM golang:1.25.4-trixie AS builder
 ARG KRAKENX_VERSION
 
@@ -16,6 +16,7 @@ COPY go /maelstrom
 WORKDIR /maelstrom
 RUN go get -t ./...
 
+RUN /krakend-ce/krakend check-plugin --format --libc "GLIBC-2.41_(debian-13)"
 RUN go build -buildmode=plugin -o openai-a2a.so ./plugin/openai-a2a
 RUN go build -buildmode=plugin -o agentcard-rw.so ./plugin/agentcard-rw
 
