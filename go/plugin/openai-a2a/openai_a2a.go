@@ -147,8 +147,32 @@ func transformOpenAIToA2A(openAIReq models.OpenAIRequest, conversationId string)
 		return nil, errors.New("no messages found")
 	}
 
-	// Get the last message (the current user message)
-	lastMsg := openAIReq.Messages[numMessages-1]
+	// Find the index of the last assistant message
+	lastAssistantIdx := -1
+	for i := numMessages - 1; i >= 0; i-- {
+		if openAIReq.Messages[i].Role == "assistant" {
+			lastAssistantIdx = i
+			break
+		}
+	}
+
+	// Determine which messages to include in the A2A message
+	// If there's an assistant message, include all messages after it
+	// If there's no assistant message, include all messages
+	startIdx := 0
+	if lastAssistantIdx >= 0 {
+		startIdx = lastAssistantIdx + 1
+	}
+
+	// Combine all messages from startIdx onwards
+	var combinedContent strings.Builder
+	for i := startIdx; i < numMessages; i++ {
+		msg := openAIReq.Messages[i]
+		if i > startIdx {
+			combinedContent.WriteString("\n")
+		}
+		combinedContent.WriteString(msg.Content)
+	}
 
 	// Create the main message
 	message := models.Message{
@@ -159,7 +183,7 @@ func transformOpenAIToA2A(openAIReq models.OpenAIRequest, conversationId string)
 		Parts: []models.MessagePartsElem{
 			models.TextPart{
 				Kind: "text",
-				Text: lastMsg.Content,
+				Text: combinedContent.String(),
 			},
 		},
 	}

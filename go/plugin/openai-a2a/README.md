@@ -141,7 +141,20 @@ This allows clients to maintain conversation context by sending the same convers
 
 ### Message Handling
 
-The plugin uses the last user message from the OpenAI messages array as the primary message content for the A2A request. All other messages (system messages and earlier conversation context) are forwarded to the history field in the A2A transformation.
+The plugin combines all messages after the last assistant message in the OpenAI messages array as the primary message content for the A2A request. This allows multiple user messages to be processed together as a single request to the agent.
+
+**Examples:**
+
+- If the messages array contains only user messages (no assistant messages), all messages are combined
+- If the messages array contains conversation history with assistant responses, only messages after the last assistant response are included
+
+```
+Messages: [user1, assistant1, user2, user3]
+Result: user2 + user3 (combined with newlines)
+
+Messages: [system, user1, user2]
+Result: system + user1 + user2 (combined with newlines)
+```
 
 ### Protocol References
 

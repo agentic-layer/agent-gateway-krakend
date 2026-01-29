@@ -17,7 +17,7 @@ const (
 	configStr = `{
       "openai_a2a_config": {}
 	}`
-	configStrEmpty = `{}`
+	configStrEmpty      = `{}`
 	configStrWithAgents = `{
       "openai_a2a_config": {
         "agents": [
@@ -166,10 +166,11 @@ func Test_transformOpenAIToA2A(t *testing.T) {
 	assert.NotNil(t, a2aReq.Params.Metadata)
 }
 
-func Test_transformOpenAIToA2A_WithMultipleMessages(t *testing.T) {
+func Test_transformOpenAIToA2A_WithMultipleMessages_NoAssistant(t *testing.T) {
 	openAIReq := models.OpenAIRequest{
 		Model: "gpt-4",
 		Messages: []models.OpenAIMessage{
+			{Role: "user", Content: "What is the weather?"},
 			{Role: "user", Content: "What about tomorrow?"},
 		},
 	}
@@ -178,14 +179,79 @@ func Test_transformOpenAIToA2A_WithMultipleMessages(t *testing.T) {
 
 	assert.Nil(t, err)
 
-	// Last message should be the primary message
+	// All messages should be combined when there's no assistant message
 	assert.Equal(t, "message", a2aReq.Params.Message.Kind)
+	textPart := a2aReq.Params.Message.Parts[0].(models.TextPart)
+	assert.Equal(t, "What is the weather?\nWhat about tomorrow?", textPart.Text)
+	assert.NotNil(t, a2aReq.Params.Message.ContextId)
+	assert.Equal(t, "some-conversation-id", *a2aReq.Params.Message.ContextId)
+}
+
+func Test_transformOpenAIToA2A_MessagesAfterAssistant(t *testing.T) {
+	openAIReq := models.OpenAIRequest{
+		Model: "gpt-4",
+		Messages: []models.OpenAIMessage{
+			{Role: "user", Content: "What is the weather?"},
+			{Role: "assistant", Content: "It's sunny today."},
+			{Role: "user", Content: "What about tomorrow?"},
+		},
+	}
+
+	a2aReq, err := transformOpenAIToA2A(openAIReq, "some-conversation-id")
+
+	assert.Nil(t, err)
+
+	// Only messages after the last assistant message should be included
 	textPart := a2aReq.Params.Message.Parts[0].(models.TextPart)
 	assert.Equal(t, "What about tomorrow?", textPart.Text)
 	assert.NotNil(t, a2aReq.Params.Message.ContextId)
 	assert.Equal(t, "some-conversation-id", *a2aReq.Params.Message.ContextId)
+}
 
+func Test_transformOpenAIToA2A_MultipleMessagesAfterAssistant(t *testing.T) {
+	openAIReq := models.OpenAIRequest{
+		Model: "gpt-4",
+		Messages: []models.OpenAIMessage{
+			{Role: "system", Content: "You are a helpful assistant."},
+			{Role: "user", Content: "Hello"},
+			{Role: "assistant", Content: "Hi there!"},
+			{Role: "user", Content: "What is the weather?"},
+			{Role: "user", Content: "And tomorrow?"},
+		},
+	}
+
+	a2aReq, err := transformOpenAIToA2A(openAIReq, "some-conversation-id")
+
+	assert.Nil(t, err)
+
+	// All messages after the last assistant message should be combined
+	textPart := a2aReq.Params.Message.Parts[0].(models.TextPart)
+	assert.Equal(t, "What is the weather?\nAnd tomorrow?", textPart.Text)
 	assert.NotNil(t, a2aReq.Params.Message.ContextId)
+	assert.Equal(t, "some-conversation-id", *a2aReq.Params.Message.ContextId)
+}
+
+func Test_transformOpenAIToA2A_MultipleAssistantMessages(t *testing.T) {
+	openAIReq := models.OpenAIRequest{
+		Model: "gpt-4",
+		Messages: []models.OpenAIMessage{
+			{Role: "user", Content: "First question"},
+			{Role: "assistant", Content: "First answer"},
+			{Role: "user", Content: "Second question"},
+			{Role: "assistant", Content: "Second answer"},
+			{Role: "user", Content: "Third question"},
+		},
+	}
+
+	a2aReq, err := transformOpenAIToA2A(openAIReq, "some-conversation-id")
+
+	assert.Nil(t, err)
+
+	// Only messages after the LAST assistant message should be included
+	textPart := a2aReq.Params.Message.Parts[0].(models.TextPart)
+	assert.Equal(t, "Third question", textPart.Text)
+	assert.NotNil(t, a2aReq.Params.Message.ContextId)
+	assert.Equal(t, "some-conversation-id", *a2aReq.Params.Message.ContextId)
 }
 
 func Test_transformA2AToOpenAI_WithArtifacts(t *testing.T) {
@@ -424,4 +490,3 @@ func TestStreamingRequestReturnsError(t *testing.T) {
 	// Verify backend was not called (streaming check happens before agent resolution)
 	assert.Nil(t, mockHandler.ReceivedRequest)
 }
-
