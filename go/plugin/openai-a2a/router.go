@@ -136,8 +136,6 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		return
 	}
 
-	reqLogger.Debug("handling global /chat/completions request")
-
 	// Read and parse OpenAI request
 	bodyBytes, err := io.ReadAll(req.Body)
 	if err != nil {
@@ -145,6 +143,8 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		http.Error(w, "failed to read request body", http.StatusBadRequest)
 		return
 	}
+
+	reqLogger.Debug("handling global /chat/completions request:\n%s", string(bodyBytes))
 
 	var openAIReq models.OpenAIRequest
 	if err := json.Unmarshal(bodyBytes, &openAIReq); err != nil {
@@ -228,7 +228,7 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 	}
 
 	// Route to agent endpoint using model's path
-	reqLogger.Debug("transformed OpenAI request to A2A format, forwarding to: %s", modelInfo.Path)
+	reqLogger.Debug("transformed OpenAI request to A2A format, forwarding to %s:\n%s", modelInfo.Path, string(a2aBody))
 
 	// Create new request to backend
 	req.Body = io.NopCloser(bytes.NewReader(a2aBody))

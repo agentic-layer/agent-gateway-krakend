@@ -139,7 +139,7 @@ curl http://localhost:10000/mock-agent/chat/completions \
 curl http://localhost:10000/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "default/mock-agent",
+    "model": "local/mock-agent",
     "messages": [
       {
         "role": "user",
