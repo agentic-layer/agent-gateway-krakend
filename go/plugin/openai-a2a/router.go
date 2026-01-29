@@ -260,11 +260,14 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 
 	// Parse A2A response
 	var a2aResp models.SendMessageSuccessResponse
-	if err := json.Unmarshal(rw.body.Bytes(), &a2aResp); err != nil {
+	a2aRespBytes := rw.body.Bytes()
+	if err := json.Unmarshal(a2aRespBytes, &a2aResp); err != nil {
 		reqLogger.Error("failed to parse A2A response: %s", err)
 		http.Error(w, "failed to parse backend response", http.StatusInternalServerError)
 		return
 	}
+
+	reqLogger.Debug("received A2A response:\n%s", string(a2aRespBytes))
 
 	// Transform A2A response back to OpenAI format
 	openAIResp := transformA2AToOpenAI(a2aResp, openAIReq)
@@ -277,7 +280,7 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		return
 	}
 
-	reqLogger.Debug("transformed A2A response back to OpenAI format")
+	reqLogger.Debug("transformed A2A response back to OpenAI format:\n%s", string(openAIRespBody))
 
 	// Write the transformed response
 	w.Header().Set(headers.ContentType, "application/json")
