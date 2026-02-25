@@ -2,88 +2,67 @@ package logging
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strings"
-	"testing"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-type PluginLogger struct {
-	logger    *log.Logger
-	sessionId string
+// Logger matches the interface KrakenD provides via RegisterLogger.
+type Logger interface {
+	Debug(v ...interface{})
+	Info(v ...interface{})
+	Warning(v ...interface{})
+	Error(v ...interface{})
+	Critical(v ...interface{})
+	Fatal(v ...interface{})
 }
 
-var zero = time.Time{}
+// fallbackLogger implements Logger using fmt, producing output in KrakenD's format.
+type fallbackLogger struct {
+	pluginName string
+}
 
-func newLogger(pluginName string) *log.Logger {
-	if testing.Testing() && len(pluginName) > 14 {
-		panic("pluginName '" + pluginName + "' > 14 characters")
+func (l *fallbackLogger) log(level string, v ...interface{}) {
+	ts := time.Now().Format("2006/01/02 - 15:04:05.000")
+	fmt.Fprintf(os.Stdout, " %s ▶ %-5s [%s] %s\n", ts, level, strings.ToUpper(l.pluginName), fmt.Sprint(v...))
+}
+
+func (l *fallbackLogger) Debug(v ...interface{})    { l.log("DEBUG", v...) }
+func (l *fallbackLogger) Info(v ...interface{})     { l.log("INFO", v...) }
+func (l *fallbackLogger) Warning(v ...interface{})  { l.log("WARN", v...) }
+func (l *fallbackLogger) Error(v ...interface{})    { l.log("ERROR", v...) }
+func (l *fallbackLogger) Critical(v ...interface{}) { l.log("CRIT", v...) }
+func (l *fallbackLogger) Fatal(v ...interface{})    { l.log("FATAL", v...) }
+
+// New returns a Logger that produces output in KrakenD's log format.
+// Used as a fallback before KrakenD provides its own logger via RegisterLogger.
+func New(pluginName string) Logger {
+	return &fallbackLogger{pluginName: pluginName}
+}
+
+// prefixLogger wraps a KrakenD-provided logger and prepends the plugin name tag to every message.
+type prefixLogger struct {
+	inner      Logger
+	pluginName string
+}
+
+func (l *prefixLogger) tag(v []interface{}) []interface{} {
+	return append([]interface{}{fmt.Sprintf("[%s]", strings.ToUpper(l.pluginName))}, v...)
+}
+
+func (l *prefixLogger) Debug(v ...interface{})    { l.inner.Debug(l.tag(v)...) }
+func (l *prefixLogger) Info(v ...interface{})     { l.inner.Info(l.tag(v)...) }
+func (l *prefixLogger) Warning(v ...interface{})  { l.inner.Warning(l.tag(v)...) }
+func (l *prefixLogger) Error(v ...interface{})    { l.inner.Error(l.tag(v)...) }
+func (l *prefixLogger) Critical(v ...interface{}) { l.inner.Critical(l.tag(v)...) }
+func (l *prefixLogger) Fatal(v ...interface{})    { l.inner.Fatal(l.tag(v)...) }
+
+// Wrap adapts a KrakenD-provided logger to our Logger interface,
+// prepending the plugin name tag to every message.
+func Wrap(v interface{}, pluginName string) (Logger, bool) {
+	l, ok := v.(Logger)
+	if !ok {
+		return nil, false
 	}
-	return log.New(os.Stdout, fmt.Sprintf("[%-14s] ", strings.ToTitle(pluginName)), log.LstdFlags|log.Lmicroseconds)
-}
-
-func newRandomId() string {
-	return uuid.New().String()
-}
-
-// New creates a new default logger with no sessionId
-func New(pluginName string) *PluginLogger {
-	return &PluginLogger{
-		logger:    newLogger(pluginName),
-		sessionId: "",
-	}
-}
-
-// NewWithPluginName creates a new logger using the plugin name
-func NewWithPluginName(pluginName string) *PluginLogger {
-	return &PluginLogger{
-		logger: newLogger(pluginName),
-	}
-}
-
-func (l *PluginLogger) output(level string, start time.Time, format string, v ...interface{}) {
-	timer := ""
-	if !start.IsZero() {
-		timer = fmt.Sprintf(" (took %v)", time.Since(start))
-	}
-	if l.sessionId == "" {
-		l.logger.Printf("| %-5s | %v%s\n", level, fmt.Sprintf(format, v...), timer)
-	} else {
-		l.logger.Printf("| %s | %-5s | %v%s\n", l.sessionId, level, fmt.Sprintf(format, v...), timer)
-	}
-}
-
-func (l *PluginLogger) Debug(format string, v ...interface{}) {
-	l.output("DEBUG", zero, format, v...)
-}
-
-func (l *PluginLogger) DebugTimed(start time.Time, format string, v ...interface{}) {
-	l.output("DEBUG", start, format, v...)
-}
-
-func (l *PluginLogger) Info(format string, v ...interface{}) {
-	l.output("INFO", zero, format, v...)
-}
-
-func (l *PluginLogger) InfoTimed(start time.Time, format string, v ...interface{}) {
-	l.output("INFO", start, format, v...)
-}
-
-func (l *PluginLogger) Warn(format string, v ...interface{}) {
-	l.output("WARN", zero, format, v...)
-}
-
-func (l *PluginLogger) WarnTimed(start time.Time, format string, v ...interface{}) {
-	l.output("WARN", start, format, v...)
-}
-
-func (l *PluginLogger) Error(format string, v ...interface{}) {
-	l.output("ERROR", zero, format, v...)
-}
-
-func (l *PluginLogger) ErrorTimed(start time.Time, format string, v ...interface{}) {
-	l.output("ERROR", start, format, v...)
+	return &prefixLogger{inner: l, pluginName: pluginName}, true
 }

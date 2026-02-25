@@ -39,13 +39,20 @@ func (r registerer) RegisterHandlers(f func(
 	logger.Info("registered")
 }
 
+func (r registerer) RegisterLogger(v interface{}) {
+	if kl, ok := logging.Wrap(v, pluginName); ok {
+		logger = kl
+	}
+	logger.Info("logger registered")
+}
+
 func (r registerer) registerHandlers(_ context.Context, extra map[string]interface{}, handler http.Handler) (http.Handler, error) {
 	var cfg config
 	err := parseConfig(extra, &cfg)
 	if err != nil {
 		return nil, err
 	}
-	logger.Info("configuration loaded successfully with %d agents", len(cfg.Agents))
+	logger.Info(fmt.Sprintf("configuration loaded successfully with %d agents", len(cfg.Agents)))
 
 	return http.HandlerFunc(r.handleRequest(cfg, handler)), nil
 }

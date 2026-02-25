@@ -36,6 +36,13 @@ func (r registerer) RegisterHandlers(f func(
 	logger.Info("registered")
 }
 
+func (r registerer) RegisterLogger(v interface{}) {
+	if kl, ok := logging.Wrap(v, pluginName); ok {
+		logger = kl
+	}
+	logger.Info("logger registered")
+}
+
 // responseWriter wraps http.ResponseWriter to capture response body
 type responseWriter struct {
 	http.ResponseWriter
@@ -66,16 +73,14 @@ func (r registerer) registerHandlers(_ context.Context, _ map[string]interface{}
 
 func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {
-		reqLogger := logging.NewWithPluginName(pluginName)
-
 		// Check if this is a GET request to an agent card endpoint
 		if req.Method == http.MethodGet && isAgentCardEndpoint(req.URL.Path) {
-			reqLogger.Debug("intercepted agent card request: %s", req.URL.Path)
+			logger.Debug("intercepted agent card request:", req.URL.Path)
 
 			// Get gateway URL
 			gatewayURL, err := getGatewayURL(req)
 			if err != nil {
-				reqLogger.Error("cannot determine gateway URL: %s", err)
+				logger.Error("cannot determine gateway URL:", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -83,12 +88,12 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			// Extract full agent path from request (everything before /.well-known)
 			agentPath := extractAgentPath(req.URL.Path)
 			if agentPath == "" {
-				reqLogger.Warn("cannot extract agent path from: %s - passing through", req.URL.Path)
+				logger.Warning(fmt.Sprintf("cannot extract agent path from: %s - passing through", req.URL.Path))
 				handler.ServeHTTP(w, req)
 				return
 			}
 
-			reqLogger.Debug("rewriting URLs for agent path: %s, gateway: %s", agentPath, gatewayURL)
+			logger.Debug(fmt.Sprintf("rewriting URLs for agent path: %s, gateway: %s", agentPath, gatewayURL))
 
 			// Wrap response writer to capture backend response
 			rw := newResponseWriter(w)
@@ -98,7 +103,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 
 			// Only transform successful responses
 			if rw.statusCode != http.StatusOK {
-				reqLogger.Info("backend returned non-OK status: %d - returning error", rw.statusCode)
+				logger.Info(fmt.Sprintf("backend returned non-OK status: %d - returning error", rw.statusCode))
 				http.Error(w, "Backend service returned an error", rw.statusCode)
 				return
 			}
@@ -106,7 +111,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			// Validate content type
 			contentType := rw.Header().Get("Content-Type")
 			if !strings.Contains(contentType, "application/json") {
-				reqLogger.Warn("unexpected content-type: %s - returning error", contentType)
+				logger.Warning(fmt.Sprintf("unexpected content-type: %s - returning error", contentType))
 				http.Error(w, "Expected application/json content type", http.StatusUnsupportedMediaType)
 				return
 			}
@@ -114,7 +119,7 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			// Parse agent card into map to preserve unknown fields
 			var agentCardMap map[string]interface{}
 			if err := json.Unmarshal(rw.body.Bytes(), &agentCardMap); err != nil {
-				reqLogger.Error("failed to parse agent card: %s - returning error", err)
+				logger.Error(fmt.Sprintf("failed to parse agent card: %s - returning error", err))
 				http.Error(w, "Failed to parse agent card JSON", http.StatusInternalServerError)
 				return
 			}
@@ -125,19 +130,19 @@ func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWrit
 			// Marshal rewritten agent card
 			rewrittenBody, err := json.Marshal(agentCardMap)
 			if err != nil {
-				reqLogger.Error("failed to marshal rewritten agent card: %s", err)
+				logger.Error("failed to marshal rewritten agent card:", err)
 				http.Error(w, "failed to create rewritten agent card", http.StatusInternalServerError)
 				return
 			}
 
-			reqLogger.Debug("transformed agent card URLs to external gateway format")
+			logger.Debug("transformed agent card URLs to external gateway format")
 
 			// Remove Content-Length to allow for recalculation
 			w.Header().Del("Content-Length")
 			w.WriteHeader(http.StatusOK)
 
 			if _, err := w.Write(rewrittenBody); err != nil {
-				reqLogger.Error("failed to write response: %s", err)
+				logger.Error("failed to write response:", err)
 			}
 			return
 		}

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentic-layer/agent-gateway-krakend/lib/logging"
 	"github.com/agentic-layer/agent-gateway-krakend/lib/models"
 	"github.com/go-http-utils/headers"
 )
@@ -128,10 +127,8 @@ func resolveAgentBackend(model string, agents []AgentInfo) (*ModelInfo, error) {
 
 // handleGlobalChatCompletions handles POST /chat/completions requests
 func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handler http.Handler, agents []AgentInfo) {
-	reqLogger := logging.NewWithPluginName(pluginName)
-
 	if req.Method != http.MethodPost {
-		reqLogger.Debug("invalid method for /chat/completions: %s", req.Method)
+		logger.Debug("invalid method for /chat/completions:", req.Method)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -139,23 +136,23 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 	// Read and parse OpenAI request
 	bodyBytes, err := io.ReadAll(req.Body)
 	if err != nil {
-		reqLogger.Error("failed to read request body: %s", err)
+		logger.Error("failed to read request body:", err)
 		http.Error(w, "failed to read request body", http.StatusBadRequest)
 		return
 	}
 
-	reqLogger.Debug("handling global /chat/completions request:\n%s", string(bodyBytes))
+	logger.Debug(fmt.Sprintf("handling global /chat/completions request:\n%s", string(bodyBytes)))
 
 	var openAIReq models.OpenAIRequest
 	if err := json.Unmarshal(bodyBytes, &openAIReq); err != nil {
-		reqLogger.Error("failed to parse OpenAI request: %s", err)
+		logger.Error("failed to parse OpenAI request:", err)
 		http.Error(w, "invalid OpenAI request format", http.StatusBadRequest)
 		return
 	}
 
 	// Check for streaming (not supported)
 	if openAIReq.Stream {
-		reqLogger.Warn("streaming request detected, returning error (streaming not supported)")
+		logger.Warning("streaming request detected, returning error (streaming not supported)")
 		errorResponse := map[string]interface{}{
 			"error": map[string]interface{}{
 				"message": "Streaming is not currently supported by the Agent Gateway",
@@ -166,24 +163,24 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		w.Header().Set(headers.ContentType, "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(errorResponse); err != nil {
-			reqLogger.Error("failed to write response: %s", err)
+			logger.Error("failed to write response:", err)
 		}
 		return
 	}
 
 	// Check model parameter
 	if openAIReq.Model == "" {
-		reqLogger.Error("model parameter is required")
+		logger.Error("model parameter is required")
 		http.Error(w, "model parameter is required", http.StatusBadRequest)
 		return
 	}
 
-	reqLogger.Debug("resolving agent for model: %s", openAIReq.Model)
+	logger.Debug("resolving agent for model:", openAIReq.Model)
 
 	// Resolve agent backend from config
 	modelInfo, err := resolveAgentBackend(openAIReq.Model, agents)
 	if err != nil {
-		reqLogger.Error("failed to resolve agent: %s", err)
+		logger.Error("failed to resolve agent:", err)
 
 		// Handle structured errors
 		var resErr *AgentResolutionError
@@ -200,21 +197,21 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		return
 	}
 
-	reqLogger.Debug("resolved model %s with backend %s", modelInfo.ModelID, modelInfo.URL)
+	logger.Debug(fmt.Sprintf("resolved model %s with backend %s", modelInfo.ModelID, modelInfo.URL))
 
 	// Get conversation ID from header
 	conversationId := req.Header.Get("X-Conversation-ID")
 	if conversationId == "" {
-		reqLogger.Warn("no X-Conversation-ID header found, generating new conversation ID")
+		logger.Warning("no X-Conversation-ID header found, generating new conversation ID")
 		conversationId = fmt.Sprintf("%d", time.Now().UnixNano())
 	} else {
-		reqLogger.Debug("using conversation ID from header: %s", conversationId)
+		logger.Debug("using conversation ID from header:", conversationId)
 	}
 
 	// Transform to A2A format
 	a2aReq, err := transformOpenAIToA2A(openAIReq, conversationId)
 	if err != nil {
-		reqLogger.Error("failed to transform OpenAI request: %s", err)
+		logger.Error("failed to transform OpenAI request:", err)
 		http.Error(w, "invalid OpenAI request", http.StatusBadRequest)
 		return
 	}
@@ -222,13 +219,10 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 	// Marshal A2A request
 	a2aBody, err := json.Marshal(a2aReq)
 	if err != nil {
-		reqLogger.Error("failed to marshal A2A request: %s", err)
+		logger.Error("failed to marshal A2A request:", err)
 		http.Error(w, "failed to create A2A request", http.StatusInternalServerError)
 		return
 	}
-
-	// Route to agent endpoint using model's path
-	reqLogger.Debug("transformed OpenAI request to A2A format, forwarding to %s:\n%s", modelInfo.Path, string(a2aBody))
 
 	// Create new request to backend
 	req.Body = io.NopCloser(bytes.NewReader(a2aBody))
@@ -244,7 +238,7 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 
 	// Only transform successful responses
 	if rw.statusCode != http.StatusOK {
-		reqLogger.Info("backend returned non-OK status: %d, passing through", rw.statusCode)
+		logger.Info(fmt.Sprintf("backend returned non-OK status: %d, passing through", rw.statusCode))
 		// Copy headers from captured response
 		for key, values := range rw.Header() {
 			for _, value := range values {
@@ -253,7 +247,7 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		}
 		w.WriteHeader(rw.statusCode)
 		if _, err := w.Write(rw.body.Bytes()); err != nil {
-			reqLogger.Error("failed to write error response: %s", err)
+			logger.Error("failed to write error response:", err)
 		}
 		return
 	}
@@ -262,12 +256,10 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 	var a2aResp models.SendMessageSuccessResponse
 	a2aRespBytes := rw.body.Bytes()
 	if err := json.Unmarshal(a2aRespBytes, &a2aResp); err != nil {
-		reqLogger.Error("failed to parse A2A response: %s", err)
+		logger.Error("failed to parse A2A response:", err)
 		http.Error(w, "failed to parse backend response", http.StatusInternalServerError)
 		return
 	}
-
-	reqLogger.Debug("received A2A response:\n%s", string(a2aRespBytes))
 
 	// Transform A2A response back to OpenAI format
 	openAIResp := transformA2AToOpenAI(a2aResp, openAIReq)
@@ -275,12 +267,12 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 	// Marshal and send OpenAI response
 	openAIRespBody, err := json.Marshal(openAIResp)
 	if err != nil {
-		reqLogger.Error("failed to marshal OpenAI response: %s", err)
+		logger.Error("failed to marshal OpenAI response:", err)
 		http.Error(w, "failed to create OpenAI response", http.StatusInternalServerError)
 		return
 	}
 
-	reqLogger.Debug("transformed A2A response back to OpenAI format:\n%s", string(openAIRespBody))
+	logger.Debug(fmt.Sprintf("transformed A2A response back to OpenAI format:\n%s", string(openAIRespBody)))
 
 	// Write the transformed response
 	w.Header().Set(headers.ContentType, "application/json")
@@ -288,6 +280,6 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 	w.WriteHeader(http.StatusOK)
 
 	if _, err := w.Write(openAIRespBody); err != nil {
-		reqLogger.Error("failed to write response: %s", err)
+		logger.Error("failed to write response:", err)
 	}
 }
