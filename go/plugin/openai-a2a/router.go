@@ -141,8 +141,6 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		return
 	}
 
-	logger.Debug(fmt.Sprintf("handling global /chat/completions request:\n%s", string(bodyBytes)))
-
 	var openAIReq models.OpenAIRequest
 	if err := json.Unmarshal(bodyBytes, &openAIReq); err != nil {
 		logger.Error("failed to parse OpenAI request:", err)
@@ -271,8 +269,6 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 		http.Error(w, "failed to create OpenAI response", http.StatusInternalServerError)
 		return
 	}
-
-	logger.Debug(fmt.Sprintf("transformed A2A response back to OpenAI format:\n%s", string(openAIRespBody)))
 
 	// Write the transformed response
 	w.Header().Set(headers.ContentType, "application/json")

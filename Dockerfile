@@ -19,6 +19,7 @@ RUN go get -t ./...
 RUN /krakend-ce/krakend check-plugin --format --libc "GLIBC-2.41_(debian-13)"
 RUN go build -buildmode=plugin -o openai-a2a.so ./plugin/openai-a2a
 RUN go build -buildmode=plugin -o agentcard-rw.so ./plugin/agentcard-rw
+RUN go build -buildmode=plugin -o body-logger.so ./plugin/body-logger
 
 FROM gcr.io/distroless/base-debian12
 ARG KRAKENX_VERSION

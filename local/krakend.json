@@ -10,7 +10,9 @@
     "plugin/http-server": {
       "@comment_name": "Name order defines handler order. Last entry is outermost/first handler.",
       "name": [
-        "agentcard-rw", "openai-a2a"
+        "agentcard-rw",
+        "openai-a2a",
+        "body-logger"
       ],
       "openai_a2a_config": {
         "agents": [
@@ -22,6 +24,11 @@
           }
         ]
       }
+    },
+    "telemetry/logging": {
+      "level": "DEBUG",
+      "stdout": true,
+      "syslog": false
     },
     "router": {
       "disable_access_log": false,

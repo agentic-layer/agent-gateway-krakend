@@ -1,4 +1,4 @@
-PLUGINS=openai-a2a agentcard-rw
+PLUGINS=openai-a2a agentcard-rw body-logger
 
 .PHONY: test
 test:
