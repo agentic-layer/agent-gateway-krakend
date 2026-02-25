@@ -1,3 +1,9 @@
 # More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
 # Ignore build and test binaries.
 bin/
+/local
+/.claude
+/.github
+/.idea
+/.omc
+/build
