@@ -32,7 +32,10 @@
     },
     "router": {
       "disable_access_log": false,
-      "hide_version_header": true
+      "hide_version_header": true,
+      "logger_skip_paths": [
+        "/__health"
+      ]
     }
   },
   "timeout": "360s",
