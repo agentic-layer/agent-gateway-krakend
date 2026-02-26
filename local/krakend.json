@@ -10,9 +10,9 @@
     "plugin/http-server": {
       "@comment_name": "Name order defines handler order. Last entry is outermost/first handler.",
       "name": [
+        "body-logger",
         "agentcard-rw",
-        "openai-a2a",
-        "body-logger"
+        "openai-a2a"
       ],
       "openai_a2a_config": {
         "agents": [
