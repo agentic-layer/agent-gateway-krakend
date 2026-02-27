@@ -14,6 +14,11 @@
         "agentcard-rw",
         "openai-a2a"
       ],
+      "body_logger_config": {
+        "skip_paths": [
+          "/__health"
+        ]
+      },
       "openai_a2a_config": {
         "agents": [
           {

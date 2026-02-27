@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,6 +26,26 @@ func init() {
 	logger.Info("loaded")
 }
 
+type config struct {
+	SkipPaths []string `json:"skip_paths"`
+}
+
+func parseConfig(extra map[string]interface{}) (config, error) {
+	var cfg config
+	raw, ok := extra["body_logger_config"]
+	if !ok {
+		return cfg, nil
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return cfg, fmt.Errorf("failed to marshal config: %w", err)
+	}
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		return cfg, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+	return cfg, nil
+}
+
 func (r registerer) RegisterHandlers(f func(
 	name string,
 	handler func(context.Context, map[string]interface{}, http.Handler) (http.Handler, error),
@@ -40,13 +61,28 @@ func (r registerer) RegisterLogger(v interface{}) {
 	logger.Info("logger registered")
 }
 
-func (r registerer) registerHandlers(_ context.Context, _ map[string]interface{}, handler http.Handler) (http.Handler, error) {
+func (r registerer) registerHandlers(_ context.Context, extra map[string]interface{}, handler http.Handler) (http.Handler, error) {
+	cfg, err := parseConfig(extra)
+	if err != nil {
+		logger.Warning(fmt.Sprintf("failed to parse config, continuing without skip_paths: %v", err))
+	}
+
+	skipPaths := make(map[string]bool, len(cfg.SkipPaths))
+	for _, p := range cfg.SkipPaths {
+		skipPaths[p] = true
+	}
+
 	logger.Info("plugin initialized successfully")
-	return http.HandlerFunc(r.handleRequest(handler)), nil
+	return http.HandlerFunc(r.handleRequest(handler, skipPaths)), nil
 }
 
-func (r registerer) handleRequest(handler http.Handler) func(w http.ResponseWriter, req *http.Request) {
+func (r registerer) handleRequest(handler http.Handler, skipPaths map[string]bool) func(w http.ResponseWriter, req *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {
+		if skipPaths[req.URL.Path] {
+			handler.ServeHTTP(w, req)
+			return
+		}
+
 		// Log request body
 		if req.Body != nil {
 			body, err := io.ReadAll(req.Body)
