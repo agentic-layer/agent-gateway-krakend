@@ -445,6 +445,79 @@ func Test_transformA2AToOpenAI_SkipsNonTextParts(t *testing.T) {
 	assert.Equal(t, "Visible text", openAIResp.Choices[0].Message.Content)
 }
 
+func Test_transformA2AToOpenAI_FallbackToStatusMessage(t *testing.T) {
+	timestamp := "2025-10-02T12:00:00Z"
+	a2aResp := models.SendMessageSuccessResponse{
+		Jsonrpc: "2.0",
+		Id:      1,
+		Result: models.SendMessageSuccessResponseResult{
+			Artifacts: []models.Artifact{}, // No artifacts
+			ContextId: "context-123",
+			History:   []models.Message{}, // No history
+			Id:        "task-123",
+			Kind:      "task",
+			Status: models.TaskStatus{
+				State:     "completed",
+				Timestamp: &timestamp,
+				Message: &models.Message{
+					Kind:      "message",
+					MessageId: "msg-status",
+					Role:      "agent",
+					Parts: []models.MessagePartsElem{
+						models.TextPart{Kind: "text", Text: "Response from status message."},
+					},
+				},
+			},
+		},
+	}
+
+	openAIReq := models.OpenAIRequest{Model: "gpt-4"}
+	openAIResp := transformA2AToOpenAI(a2aResp, openAIReq)
+
+	assert.Equal(t, "assistant", openAIResp.Choices[0].Message.Role)
+	assert.Equal(t, "Response from status message.", openAIResp.Choices[0].Message.Content)
+}
+
+func Test_transformA2AToOpenAI_ArtifactsPreferredOverStatusMessage(t *testing.T) {
+	timestamp := "2025-10-02T12:00:00Z"
+	a2aResp := models.SendMessageSuccessResponse{
+		Jsonrpc: "2.0",
+		Id:      1,
+		Result: models.SendMessageSuccessResponseResult{
+			Artifacts: []models.Artifact{
+				{
+					ArtifactId: "artifact-123",
+					Parts: []models.ArtifactPartsElem{
+						models.TextPart{Kind: "text", Text: "Content from artifact."},
+					},
+				},
+			},
+			ContextId: "context-123",
+			History:   []models.Message{},
+			Id:        "task-123",
+			Kind:      "task",
+			Status: models.TaskStatus{
+				State:     "completed",
+				Timestamp: &timestamp,
+				Message: &models.Message{
+					Kind:      "message",
+					MessageId: "msg-status",
+					Role:      "agent",
+					Parts: []models.MessagePartsElem{
+						models.TextPart{Kind: "text", Text: "Content from status."},
+					},
+				},
+			},
+		},
+	}
+
+	openAIReq := models.OpenAIRequest{Model: "gpt-4"}
+	openAIResp := transformA2AToOpenAI(a2aResp, openAIReq)
+
+	// Artifacts should take priority over status message
+	assert.Equal(t, "Content from artifact.", openAIResp.Choices[0].Message.Content)
+}
+
 // PAAL-223: Test that streaming requests are rejected with a clear error message
 func TestStreamingRequestReturnsError(t *testing.T) {
 	var extraConfig map[string]interface{}

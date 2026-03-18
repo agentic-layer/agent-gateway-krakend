@@ -76,9 +76,21 @@ func (r registerer) handleRequest(cfg config, handler http.Handler) func(w http.
 	}
 }
 
-// transformA2AToOpenAI converts A2A response to OpenAI chat completion format
+// transformA2AToOpenAI converts an A2A Task response to OpenAI chat completion format.
+//
+// The A2A specification (https://a2a-protocol.org/latest/specification/) defines that
+// a message/send response returns a Task object which can carry agent output in multiple places:
+//
+//  1. artifacts: Discrete output objects (documents, data) produced by the task.
+//     This is the primary source for structured agent output.
+//  2. status.message: The message associated with the current task status transition.
+//     Some A2A implementations (e.g. Microsoft's A2A SDK) place the agent's response
+//     here rather than in artifacts, which is valid per the spec.
+//  3. history: The conversation history. Used as a last resort by searching backwards
+//     for the most recent agent message.
+//
+// We check all three in priority order to maximize compatibility across A2A implementations.
 func transformA2AToOpenAI(a2aResp models.SendMessageSuccessResponse, originalReq models.OpenAIRequest) models.OpenAIResponse {
-	// Extract text from artifacts (preferred) or last agent message in history
 	var content strings.Builder
 
 	// First, try to get content from artifacts
@@ -99,7 +111,23 @@ func transformA2AToOpenAI(a2aResp models.SendMessageSuccessResponse, originalReq
 		}
 	}
 
-	// If no artifacts, fall back to last agent message in history
+	// If no artifacts, fall back to status.message
+	if content.Len() == 0 && a2aResp.Result.Status.Message != nil {
+		for _, part := range a2aResp.Result.Status.Message.Parts {
+			// Handle both concrete TextPart and map from JSON unmarshaling
+			if textPart, ok := part.(models.TextPart); ok {
+				content.WriteString(textPart.Text)
+			} else if partMap, ok := part.(map[string]interface{}); ok {
+				if kind, ok := partMap["kind"].(string); ok && kind == "text" {
+					if text, ok := partMap["text"].(string); ok {
+						content.WriteString(text)
+					}
+				}
+			}
+		}
+	}
+
+	// If still no content, fall back to last agent message in history
 	if content.Len() == 0 {
 		for i := len(a2aResp.Result.History) - 1; i >= 0; i-- {
 			msg := a2aResp.Result.History[i]
