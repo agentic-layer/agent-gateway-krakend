@@ -227,6 +227,7 @@ func handleGlobalChatCompletions(w http.ResponseWriter, req *http.Request, handl
 	req.ContentLength = int64(len(a2aBody))
 	req.URL.Path = modelInfo.Path
 	req.Header.Set(headers.ContentType, "application/json")
+	req.Header.Set(headers.ContentLength, fmt.Sprintf("%d", len(a2aBody)))
 
 	// Wrap response writer to capture A2A response
 	rw := newResponseWriter(w)
