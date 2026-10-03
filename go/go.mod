@@ -17,15 +17,15 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace go.opentelemetry.io/otel => go.opentelemetry.io/otel v1.46.0
+replace go.opentelemetry.io/otel => go.opentelemetry.io/otel v1.47.0
 
 replace go.opentelemetry.io/auto/sdk => go.opentelemetry.io/auto/sdk v1.2.1
 
 replace go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
 
-replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v1.46.0
+replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v1.47.0
 
-replace go.opentelemetry.io/otel/trace => go.opentelemetry.io/otel/trace v1.46.0
+replace go.opentelemetry.io/otel/trace => go.opentelemetry.io/otel/trace v1.47.0
 
 replace github.com/spf13/cobra => github.com/spf13/cobra v1.10.2
 
