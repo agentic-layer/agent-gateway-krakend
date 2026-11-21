@@ -19,7 +19,7 @@ require (
 
 replace go.opentelemetry.io/otel => go.opentelemetry.io/otel v1.47.0
 
-replace go.opentelemetry.io/auto/sdk => go.opentelemetry.io/auto/sdk v1.2.1
+replace go.opentelemetry.io/auto/sdk => go.opentelemetry.io/auto/sdk v1.2.2
 
 replace go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp => go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
 
